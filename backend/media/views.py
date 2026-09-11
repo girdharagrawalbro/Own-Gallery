@@ -12,6 +12,7 @@ from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 
 from .models import Media
 from .serializers import MediaSerializer
@@ -19,10 +20,18 @@ from telegram_storage.service import TelegramStorageService
 from .metadata import extract_image_taken_at, extract_video_taken_at
 
 
+class UploadRateThrottle(UserRateThrottle):
+    scope = "uploads"
+
 class MediaViewSet(viewsets.ModelViewSet):
     serializer_class = MediaSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_throttles(self):
+        if self.action == 'create':
+            return [UploadRateThrottle()]
+        return super().get_throttles()
 
     def get_queryset(self):
         queryset = Media.objects.filter(user=self.request.user, is_deleted=False)
@@ -64,9 +73,50 @@ class MediaViewSet(viewsets.ModelViewSet):
                 {"error": "No file provided."}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        from django.conf import settings
+        import os
+
+        if uploaded_file.size > settings.MAX_UPLOAD_SIZE:
+            return Response(
+                {"error": f"File exceeds maximum upload size of {settings.MAX_UPLOAD_SIZE} bytes."},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            )
+
         print("2. File received:", uploaded_file.name)
         print("3. File size:", uploaded_file.size)
-        print("4. Content type:", uploaded_file.content_type)
+        print("4. Declared Content type:", uploaded_file.content_type)
+        
+        # Real MIME/Signature Validation
+        import filetype
+        file_header = uploaded_file.read(2048)
+        uploaded_file.seek(0)
+        kind = filetype.guess(file_header)
+        
+        if kind is None:
+            return Response({"error": "Unsupported or invalid media type."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        content_type = kind.mime
+        print("5. Real Content type:", content_type)
+        
+        ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif"]
+        ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"]
+        
+        if content_type in ALLOWED_IMAGE_TYPES:
+            media_type = "image"
+        elif content_type in ALLOWED_VIDEO_TYPES:
+            media_type = "video"
+        else:
+            return Response(
+                {"error": "Unsupported or invalid media type."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Filename sanitization
+        import re
+        safe_filename = os.path.basename(uploaded_file.name)
+        safe_filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', safe_filename)
+        if not safe_filename:
+            safe_filename = "unnamed_file"
 
         import hashlib
         sha256_hash = hashlib.sha256()
@@ -80,19 +130,6 @@ class MediaViewSet(viewsets.ModelViewSet):
         if existing_media:
             print("Duplicate file found, returning existing media")
             return Response(MediaSerializer(existing_media, context={"request": request}).data, status=status.HTTP_200_OK)
-
-        content_type = uploaded_file.content_type or ""
-
-        if content_type.startswith("image/"):
-            media_type = "image"
-        elif content_type.startswith("video/"):
-            media_type = "video"
-        else:
-            print("5. Invalid media type")
-            return Response(
-                {"error": "Only images and videos are allowed."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
         print("5. Creating Telegram service")
         
@@ -138,7 +175,7 @@ class MediaViewSet(viewsets.ModelViewSet):
         media = Media.objects.create(
             user=request.user,
             media_type=media_type,
-            filename=uploaded_file.name,
+            filename=safe_filename,
             mime_type=content_type,
             file_size=uploaded_file.size,
             taken_at=taken_at,
@@ -162,6 +199,23 @@ class MediaViewSet(viewsets.ModelViewSet):
                 {"error": "Media not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
+        content_type = media.mime_type
+        if not content_type:
+            content_type, _ = mimetypes.guess_type(media.filename)
+            content_type = content_type or "application/octet-stream"
+
+        if media.media_type == "image":
+            from django.core.cache import caches
+            from django.http import HttpResponse
+            file_cache = caches["file_cache"]
+            cache_key = f"media:{media.id}:content:{media.updated_at.timestamp()}"
+            cached_data = file_cache.get(cache_key)
+            if cached_data:
+                response = HttpResponse(cached_data, content_type=content_type)
+                safe_filename = urllib.parse.quote(media.filename.encode("utf-8"))
+                response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
+                return response
+
         telegram_service = TelegramStorageService()
 
         try:
@@ -175,18 +229,24 @@ class MediaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        content_type = media.mime_type
-        if not content_type:
-            content_type, _ = mimetypes.guess_type(media.filename)
-            content_type = content_type or "application/octet-stream"
-
-        response = StreamingHttpResponse(generator(), content_type=content_type)
+        if media.media_type == "image":
+            # Cache the image
+            image_bytes = b"".join([chunk for chunk in generator()])
+            from django.core.cache import caches
+            from django.http import HttpResponse
+            file_cache = caches["file_cache"]
+            cache_key = f"media:{media.id}:content:{media.updated_at.timestamp()}"
+            file_cache.set(cache_key, image_bytes, timeout=60*60*24*30)
+            
+            response = HttpResponse(image_bytes, content_type=content_type)
+        else:
+            # Stream videos
+            response = StreamingHttpResponse(generator(), content_type=content_type)
+            if file_size:
+                response["Content-Length"] = str(file_size)
 
         safe_filename = urllib.parse.quote(media.filename.encode("utf-8"))
         response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
-        
-        if file_size:
-            response["Content-Length"] = str(file_size)
 
         return response
 
@@ -242,6 +302,17 @@ class MediaViewSet(viewsets.ModelViewSet):
             return Response(
                 {"error": "Thumbnail not available."}, status=status.HTTP_404_NOT_FOUND
             )
+            
+        from django.core.cache import cache
+        from django.http import HttpResponse
+        cache_key = f"media:{media.id}:thumbnail:{media.updated_at.timestamp()}"
+        cached_data = cache.get(cache_key)
+        
+        if cached_data:
+            response = HttpResponse(cached_data, content_type="image/jpeg")
+            safe_filename = urllib.parse.quote(f"thumb_{media.filename}".encode("utf-8"))
+            response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
+            return response
 
         telegram_service = TelegramStorageService()
 
@@ -256,14 +327,14 @@ class MediaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        response = StreamingHttpResponse(generator(), content_type="image/jpeg")
+        thumbnail_bytes = b"".join([chunk for chunk in generator()])
+        cache.set(cache_key, thumbnail_bytes, timeout=60*60*24*30)
+        
+        response = HttpResponse(thumbnail_bytes, content_type="image/jpeg")
         
         safe_filename = urllib.parse.quote(f"thumb_{media.filename}".encode("utf-8"))
         response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
         
-        if file_size:
-            response["Content-Length"] = str(file_size)
-
         return response
 
     @action(detail=True, methods=["post"], url_path="trash")

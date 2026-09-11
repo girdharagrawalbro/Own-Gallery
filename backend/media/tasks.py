@@ -91,3 +91,8 @@ def upload_media_to_telegram(self, media_id):
             media.status = "failed"
             media.upload_error = str(e)
             media.save()
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception as cleanup_err:
+                print(f"Failed to clean up temp file after max retries: {cleanup_err}")
