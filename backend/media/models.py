@@ -56,7 +56,6 @@ class Media(models.Model):
 
     taken_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
-    thumbnail = models.URLField(null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="processing")
     upload_error = models.TextField(null=True, blank=True)

@@ -98,6 +98,9 @@ DATABASES = {
         "PASSWORD": os.getenv("DB_PASSWORD"),
         "HOST": os.getenv("DB_HOST"),
         "PORT": os.getenv("DB_PORT"),
+        "OPTIONS": {
+            "sslmode": "require",
+        },
     }
 }
 
@@ -205,6 +208,7 @@ if not DEBUG:
 
     # SSL Redirect
     SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     
     # Secure Cookies
     SESSION_COOKIE_SECURE = True
@@ -212,3 +216,11 @@ if not DEBUG:
     
     # Prevent clickjacking
     X_FRAME_OPTIONS = 'DENY'
+
+
+AZURE_STORAGE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME")
+AZURE_STORAGE_ACCOUNT_KEY = os.getenv("AZURE_STORAGE_ACCOUNT_KEY")
+AZURE_STORAGE_CONTAINER = os.getenv(
+    "AZURE_STORAGE_CONTAINER",
+    "temp-uploads",
+)

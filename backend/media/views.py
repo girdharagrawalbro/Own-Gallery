@@ -1,7 +1,11 @@
 import asyncio
 
-# import os
-# import requests
+import os
+import uuid
+from django.conf import settings
+from .tasks import upload_media_to_telegram
+
+from telegram_storage.blob_storage import BlobStorageService
 from django.http import StreamingHttpResponse
 import urllib.parse
 import mimetypes
@@ -128,9 +132,11 @@ class MediaViewSet(viewsets.ModelViewSet):
         # Check for duplicate
         existing_media = Media.objects.filter(user=request.user, file_hash=file_hash).first()
         if existing_media:
-            print("Duplicate file found, returning existing media")
-            return Response(MediaSerializer(existing_media, context={"request": request}).data, status=status.HTTP_200_OK)
-
+            if existing_media.status == "completed":
+                print("Duplicate file found, returning existing media")
+                return Response(MediaSerializer(existing_media, context={"request": request}).data, status=status.HTTP_200_OK)
+            else:
+                print("Duplicate file found but status is not completed. Re-processing.")
         print("5. Creating Telegram service")
         
         taken_at = None
@@ -154,39 +160,53 @@ class MediaViewSet(viewsets.ModelViewSet):
             
         if not taken_at:
             taken_at = timezone.now()
-        import os
-        import uuid
-        from django.conf import settings
-        from .tasks import upload_media_to_telegram
+      
+        ext = os.path.splitext(uploaded_file.name)[1]
+        blob_name = f"temp_uploads/{uuid.uuid4()}{ext}"
 
+        # Save locally first
         temp_dir = os.path.join(settings.MEDIA_ROOT, "temp_uploads")
         os.makedirs(temp_dir, exist_ok=True)
-        
-        ext = os.path.splitext(uploaded_file.name)[1]
-        temp_filename = f"{uuid.uuid4()}{ext}"
-        temp_file_path = os.path.join(temp_dir, temp_filename)
-        
-        with open(temp_file_path, "wb+") as destination:
+
+        local_temp_path = os.path.join(temp_dir, os.path.basename(blob_name))
+
+        with open(local_temp_path, "wb+") as destination:
             for chunk in uploaded_file.chunks():
                 destination.write(chunk)
 
-        print("6. Temp file saved:", temp_file_path)
+        print("6. Temp file saved locally:", local_temp_path)
 
-        media = Media.objects.create(
-            user=request.user,
-            media_type=media_type,
-            filename=safe_filename,
-            mime_type=content_type,
-            file_size=uploaded_file.size,
-            taken_at=taken_at,
-            file_hash=file_hash,
-            status="processing",
-            temp_file_path=temp_file_path
-        )
+        # Upload to Azure Blob Storage
+        blob_storage = BlobStorageService()
+        blob_storage.upload_file(local_temp_path, blob_name)
+
+        print("7. Temp file uploaded to Blob:", blob_name)
+
+        # Local file is no longer needed by Celery
+        try:
+            os.remove(local_temp_path)
+        except Exception as e:
+            print("Failed to remove local temp file:", e)
+
+        if existing_media:
+            media = existing_media
+            media.status = "processing"
+            media.temp_file_path = blob_name
+            media.save()
+        else:
+            media = Media.objects.create(
+                user=request.user,
+                media_type=media_type,
+                filename=safe_filename,
+                mime_type=content_type,
+                file_size=uploaded_file.size,
+                taken_at=taken_at,
+                file_hash=file_hash,
+                status="processing",
+                temp_file_path=blob_name,
+            )
 
         upload_media_to_telegram.delay(media.id)
-
-        print("7. Database record created and Celery task triggered")
 
         return Response(MediaSerializer(media, context={"request": request}).data, status=status.HTTP_202_ACCEPTED)
     @action(detail=True, methods=["get"], url_path="content")
@@ -216,18 +236,41 @@ class MediaViewSet(viewsets.ModelViewSet):
                 response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
                 return response
 
-        telegram_service = TelegramStorageService()
-
-        try:
-            generator, file_size = asyncio.run(
-                telegram_service.get_file_stream_generator(media.telegram_file_id)
-            )
-        except Exception as e:
-            print("Telegram download error:", repr(e))
-            return Response(
-                {"error": "Unable to retrieve media from Telegram."},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        if not media.telegram_file_id:
+            if media.temp_file_path:
+                from telegram_storage.blob_storage import BlobStorageService
+                try:
+                    blob_service = BlobStorageService()
+                    blob_client = blob_service.container.get_blob_client(media.temp_file_path)
+                    file_size = blob_client.get_blob_properties().size
+                    
+                    def blob_generator():
+                        for chunk in blob_client.download_blob().chunks():
+                            yield chunk
+                    generator = blob_generator
+                except Exception as e:
+                    print(f"Blob error: {e}")
+                    return Response(
+                        {"error": "Media is still processing or unavailable."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                return Response(
+                    {"error": "Media is still processing or unavailable."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            telegram_service = TelegramStorageService()
+            try:
+                generator, file_size = asyncio.run(
+                    telegram_service.get_file_stream_generator(media.telegram_file_id)
+                )
+            except Exception as e:
+                print("Telegram download error:", repr(e))
+                return Response(
+                    {"error": "Unable to retrieve media from Telegram."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
         if media.media_type == "image":
             # Cache the image
@@ -260,18 +303,41 @@ class MediaViewSet(viewsets.ModelViewSet):
                 {"error": "Media not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        telegram_service = TelegramStorageService()
-
-        try:
-            generator, file_size = asyncio.run(
-                telegram_service.get_file_stream_generator(media.telegram_file_id)
-            )
-        except Exception as e:
-            print("Telegram download error:", repr(e))
-            return Response(
-                {"error": "Unable to retrieve media from Telegram."},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        if not media.telegram_file_id:
+            if media.temp_file_path:
+                from telegram_storage.blob_storage import BlobStorageService
+                try:
+                    blob_service = BlobStorageService()
+                    blob_client = blob_service.container.get_blob_client(media.temp_file_path)
+                    file_size = blob_client.get_blob_properties().size
+                    
+                    def blob_generator():
+                        for chunk in blob_client.download_blob().chunks():
+                            yield chunk
+                    generator = blob_generator
+                except Exception as e:
+                    print(f"Blob error: {e}")
+                    return Response(
+                        {"error": "Media is still processing or unavailable."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                return Response(
+                    {"error": "Media is still processing or unavailable."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            telegram_service = TelegramStorageService()
+            try:
+                generator, file_size = asyncio.run(
+                    telegram_service.get_file_stream_generator(media.telegram_file_id)
+                )
+            except Exception as e:
+                print("Telegram download error:", repr(e))
+                return Response(
+                    {"error": "Unable to retrieve media from Telegram."},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
         content_type = media.mime_type
         if not content_type:
@@ -281,7 +347,7 @@ class MediaViewSet(viewsets.ModelViewSet):
         response = StreamingHttpResponse(generator(), content_type=content_type)
 
         safe_filename = urllib.parse.quote(media.filename.encode("utf-8"))
-        response["Content-Disposition"] = f"attachment; filename*=utf-8''{safe_filename}"
+        response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
         
         if file_size:
             response["Content-Length"] = str(file_size)
@@ -299,6 +365,29 @@ class MediaViewSet(viewsets.ModelViewSet):
             )
 
         if not media.telegram_thumbnail_file_id:
+            if media.media_type == "image" and media.temp_file_path:
+                from telegram_storage.blob_storage import BlobStorageService
+                try:
+                    blob_service = BlobStorageService()
+                    blob_client = blob_service.container.get_blob_client(media.temp_file_path)
+                    
+                    def blob_generator():
+                        for chunk in blob_client.download_blob().chunks():
+                            yield chunk
+                            
+                    generator = blob_generator
+                    thumbnail_bytes = b"".join([chunk for chunk in generator()])
+                    
+                    from django.http import HttpResponse
+                    response = HttpResponse(thumbnail_bytes, content_type="image/jpeg")
+                    safe_filename = urllib.parse.quote(f"thumb_{media.filename}".encode("utf-8"))
+                    response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
+                    return response
+                except Exception as e:
+                    print(f"Blob thumbnail error: {e}")
+                    return Response(
+                        {"error": "Thumbnail not available."}, status=status.HTTP_404_NOT_FOUND
+                    )
             return Response(
                 {"error": "Thumbnail not available."}, status=status.HTTP_404_NOT_FOUND
             )

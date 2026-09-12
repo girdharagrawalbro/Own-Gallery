@@ -32,9 +32,6 @@ class MediaSerializer(serializers.ModelSerializer):
         if not request:
             return None
 
-        if not obj.telegram_thumbnail_file_id:
-            return None
-
         return request.build_absolute_uri(
             f"/api/media/{obj.id}/thumbnail/"
         )
