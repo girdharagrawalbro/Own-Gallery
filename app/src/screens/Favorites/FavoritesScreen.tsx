@@ -5,13 +5,13 @@ import {
     FlatList,
     Pressable,
     RefreshControl,
-    SafeAreaView,
     StyleSheet,
     Text,
     View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { ImageOff, Heart, Info } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ImageOff, Heart } from 'lucide-react-native';
 
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import VideoThumbnail from '../../components/VideoThumbnail';
@@ -24,6 +24,8 @@ const CELL = (width - 4) / 3;
 
 const FavoritesScreen = () => {
     const navigation = useNavigation();
+    const insets = useSafeAreaInsets();
+    
     const [media, setMedia] = useState<Media[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -86,7 +88,7 @@ const FavoritesScreen = () => {
 
             {item.is_favorite && (
                 <View style={styles.favoriteBadge}>
-                    <Heart size={12} color="#FF3B30" fill="#FF3B30" />
+                    <Heart size={16} color="#FF3B30" fill="#FF3B30" />
                 </View>
             )}
         </Pressable>
@@ -96,15 +98,15 @@ const FavoritesScreen = () => {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#FF3B30" />
-            </SafeAreaView>
+            <View style={styles.centerContainer}>
+                <ActivityIndicator size="large" color="#1a73e8" />
+            </View>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
+        <View style={styles.container}>
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
                 <Text style={styles.heading}>Favorites</Text>
             </View>
 
@@ -113,7 +115,8 @@ const FavoritesScreen = () => {
                 numColumns={3}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF3B30" />}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a73e8" />}
                 onEndReached={onEndReached}
                 onEndReachedThreshold={0.5}
                 ListEmptyComponent={
@@ -146,7 +149,7 @@ const FavoritesScreen = () => {
                     setMedia(prev => prev.filter(m => m.id !== deletedId));
                 }}
             />
-        </SafeAreaView>
+        </View>
     );
 };
 
@@ -155,14 +158,21 @@ export default FavoritesScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
-    heading: { fontSize: 22, fontWeight: '800', color: '#111', letterSpacing: -0.5 },
-    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#eee', overflow: 'hidden' },
+    
+    header: { paddingHorizontal: 16, paddingBottom: 16, backgroundColor: '#fff' },
+    heading: { fontSize: 28, fontWeight: '700', color: '#3c4043', letterSpacing: -0.5 },
+    
+    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#f1f3f4', overflow: 'hidden' },
     cellImage: { width: '100%', height: '100%' },
-    noThumb: { flex: 1, backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-    noThumbIcon: { fontSize: 24 }, // Keeping just in case
+    noThumb: { flex: 1, backgroundColor: '#f1f3f4', justifyContent: 'center', alignItems: 'center' },
+    
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#222', marginBottom: 8 },
-    favoriteBadge: { position: 'absolute', bottom: 4, right: 4, padding: 2 },
-    heartIcon: { fontSize: 12 }, // Keeping just in case
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
+    
+    favoriteBadge: { 
+        position: 'absolute', 
+        top: 6, 
+        left: 6, 
+        padding: 4 
+    },
 });

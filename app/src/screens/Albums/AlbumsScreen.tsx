@@ -6,7 +6,6 @@ import {
     FlatList,
     Pressable,
     RefreshControl,
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
@@ -16,7 +15,8 @@ import {
     ToastAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Folder, Plus, Info, Search } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Folder, Plus, Search } from 'lucide-react-native';
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import { getAlbums, createAlbum, deleteAlbum, updateAlbum } from '../../api/albums';
 import { Album } from '../../types/album';
@@ -26,6 +26,8 @@ const CELL = (width - 48) / 2; // 2 columns with some padding
 
 const AlbumsScreen = () => {
     const navigation = useNavigation<any>();
+    const insets = useSafeAreaInsets();
+
     const [albums, setAlbums] = useState<Album[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -144,27 +146,25 @@ const AlbumsScreen = () => {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#007AFF" />
-            </SafeAreaView>
+            <View style={styles.centerContainer}>
+                <ActivityIndicator size="large" color="#1a73e8" />
+            </View>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.heading}>Albums</Text>
-            </View>
-
-            <View style={styles.searchContainer}>
-                <View style={styles.searchBar}>
-                    <Search size={20} color="#888" style={styles.searchIcon} />
+        <View style={styles.container}>
+            {/* Search Pill Header */}
+            <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16) }]}>
+                <View style={styles.searchPill}>
+                    <Search size={20} color="#777" style={styles.searchIcon} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Search albums..."
+                        placeholder="Search albums"
+                        placeholderTextColor="#777"
                         value={searchQuery}
                         onChangeText={setSearchQuery}
-                        placeholderTextColor="#888"
+                        returnKeyType="search"
                     />
                 </View>
             </View>
@@ -174,7 +174,7 @@ const AlbumsScreen = () => {
                 numColumns={2}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
@@ -185,8 +185,8 @@ const AlbumsScreen = () => {
                 }
             />
 
-            <TouchableOpacity style={styles.fab} onPress={() => setCreateModalVisible(true)}>
-                <Plus size={32} color="#fff" />
+            <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 16, 16) }]} onPress={() => setCreateModalVisible(true)}>
+                <Plus size={28} color="#fff" />
             </TouchableOpacity>
 
             <Modal visible={createModalVisible} transparent animationType="fade">
@@ -205,7 +205,7 @@ const AlbumsScreen = () => {
                                 <Text style={styles.modalBtnText}>Cancel</Text>
                             </Pressable>
                             <Pressable style={styles.modalBtn} onPress={handleCreateAlbum}>
-                                <Text style={[styles.modalBtnText, { color: '#007AFF', fontWeight: 'bold' }]}>Create</Text>
+                                <Text style={[styles.modalBtnText, { color: '#1a73e8', fontWeight: 'bold' }]}>Create</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -228,13 +228,13 @@ const AlbumsScreen = () => {
                                 <Text style={styles.modalBtnText}>Cancel</Text>
                             </Pressable>
                             <Pressable style={styles.modalBtn} onPress={handleRenameAlbum}>
-                                <Text style={[styles.modalBtnText, { color: '#007AFF', fontWeight: 'bold' }]}>Save</Text>
+                                <Text style={[styles.modalBtnText, { color: '#1a73e8', fontWeight: 'bold' }]}>Save</Text>
                             </Pressable>
                         </View>
                     </View>
                 </View>
             </Modal>
-        </SafeAreaView>
+        </View>
     );
 };
 
@@ -243,30 +243,63 @@ export default AlbumsScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-    header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
-    heading: { fontSize: 28, fontWeight: '800', color: '#111', letterSpacing: -0.5 },
-    searchContainer: { paddingHorizontal: 16, paddingBottom: 12 },
-    searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 10, paddingHorizontal: 12 },
-    searchIcon: { marginRight: 8 },
-    searchInput: { flex: 1, height: 40, fontSize: 16, color: '#333' },
-    listContent: { padding: 16 },
+    
+    searchContainer: {
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        backgroundColor: '#fff',
+    },
+    searchPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f3f4', // Google standard search background
+        borderRadius: 24,
+        paddingHorizontal: 16,
+        height: 48,
+    },
+    searchIcon: {
+        marginRight: 12,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        color: '#222',
+        paddingVertical: 0,
+    },
+
+    listContent: { paddingHorizontal: 16, paddingTop: 8 },
     albumCard: { width: CELL, marginBottom: 24, marginHorizontal: 8 },
-    coverContainer: { width: CELL, height: CELL, borderRadius: 12, overflow: 'hidden', backgroundColor: '#f0f0f0', marginBottom: 8 },
+    coverContainer: { width: CELL, height: CELL, borderRadius: 16, overflow: 'hidden', backgroundColor: '#f1f3f4', marginBottom: 12 },
     coverImage: { width: '100%', height: '100%' },
     placeholderCover: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    placeholderIcon: { fontSize: 40 }, // Keeping just in case
-    albumName: { fontSize: 16, fontWeight: '600', color: '#111' },
-    mediaCount: { fontSize: 13, color: '#888', marginTop: 2 },
-    fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2196F3', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
-    fabText: { color: '#fff', fontSize: 22, fontWeight: '400', marginTop: -2 },
+    albumName: { fontSize: 16, fontWeight: '500', color: '#3c4043' },
+    mediaCount: { fontSize: 13, color: '#5f6368', marginTop: 4 },
+    
+    fab: { 
+        position: 'absolute', 
+        right: 20, 
+        width: 56, 
+        height: 56, 
+        borderRadius: 16, 
+        backgroundColor: '#1a73e8', // Google Blue
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        elevation: 6, 
+        shadowColor: '#000', 
+        shadowOffset: { width: 0, height: 3 }, 
+        shadowOpacity: 0.25, 
+        shadowRadius: 5 
+    },
+    
     emptyState: { alignItems: 'center', paddingTop: 100 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#222', marginBottom: 8 },
-    emptySubtitle: { fontSize: 15, color: '#666', textAlign: 'center' },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
+    emptySubtitle: { fontSize: 15, color: '#5f6368', textAlign: 'center' },
+    
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    modalContent: { width: '80%', backgroundColor: '#fff', borderRadius: 12, padding: 20 },
-    modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-    input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 20 },
-    modalActions: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 12 },
+    modalContent: { width: '80%', backgroundColor: '#fff', borderRadius: 16, padding: 24 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#3c4043' },
+    input: { borderWidth: 1, borderColor: '#dadce0', borderRadius: 8, padding: 14, fontSize: 16, marginBottom: 24, color: '#222' },
+    modalActions: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#f1f3f4', paddingTop: 16 },
     modalBtn: { flex: 1, alignItems: 'center', paddingVertical: 8 },
-    modalBtnText: { fontSize: 16, color: '#555' },
+    modalBtnText: { fontSize: 16, color: '#5f6368', fontWeight: '500' },
 });

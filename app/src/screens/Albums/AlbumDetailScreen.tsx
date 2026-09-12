@@ -5,7 +5,6 @@ import {
     FlatList,
     Pressable,
     RefreshControl,
-    SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -14,7 +13,8 @@ import {
     ToastAndroid,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ImageOff, Image as ImageIcon, Plus, Info, ChevronLeft } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ImageOff, Image as ImageIcon, Plus, ChevronLeft } from 'lucide-react-native';
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import VideoThumbnail from '../../components/VideoThumbnail';
 import MediaViewer from '../Gallery/MediaViewer';
@@ -30,6 +30,7 @@ const CELL = (width - 4) / 3;
 const AlbumDetailScreen = () => {
     const navigation = useNavigation<any>();
     const route = useRoute<any>();
+    const insets = useSafeAreaInsets();
     const { albumId, albumName } = route.params;
 
     const [media, setMedia] = useState<Media[]>([]);
@@ -138,10 +139,10 @@ const AlbumDetailScreen = () => {
     const keyExtractor = useCallback((item: Media) => item.id.toString(), []);
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <ChevronLeft size={28} color="#007AFF" />
+        <View style={styles.container}>
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={15}>
+                    <ChevronLeft size={28} color="#1a73e8" />
                 </TouchableOpacity>
                 <Text style={styles.heading} numberOfLines={1}>{albumName}</Text>
                 <View style={styles.spacer} />
@@ -149,7 +150,7 @@ const AlbumDetailScreen = () => {
 
             {loading ? (
                 <View style={styles.centerContainer}>
-                    <ActivityIndicator size="large" color="#007AFF" />
+                    <ActivityIndicator size="large" color="#1a73e8" />
                 </View>
             ) : (
                 <FlatList
@@ -157,6 +158,7 @@ const AlbumDetailScreen = () => {
                     numColumns={3}
                     keyExtractor={keyExtractor}
                     renderItem={renderItem}
+                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
@@ -172,8 +174,8 @@ const AlbumDetailScreen = () => {
                 />
             )}
 
-            <TouchableOpacity style={styles.fab} onPress={handleAddPress}>
-                <Plus size={32} color="#fff" />
+            <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 16, 16) }]} onPress={handleAddPress}>
+                <Plus size={28} color="#fff" />
             </TouchableOpacity>
 
             <MediaViewer
@@ -203,7 +205,7 @@ const AlbumDetailScreen = () => {
                 onClose={() => setUploadModalVisible(false)}
                 onUploadComplete={onRefresh}
             />
-        </SafeAreaView>
+        </View>
     );
 };
 
@@ -212,17 +214,38 @@ export default AlbumDetailScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+    
+    header: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        paddingHorizontal: 16, 
+        paddingBottom: 12, 
+        backgroundColor: '#fff',
+    },
     backBtn: { padding: 8, marginLeft: -8 },
-    backText: { color: '#007AFF', fontSize: 16 },
-    heading: { flex: 1, fontSize: 20, fontWeight: '700', color: '#111', textAlign: 'center' },
-    spacer: { width: 50 },
-    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#eee', overflow: 'hidden' },
+    heading: { flex: 1, fontSize: 20, fontWeight: '500', color: '#3c4043', textAlign: 'center' },
+    spacer: { width: 50 }, // To balance the back button width
+    
+    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#f1f3f4', overflow: 'hidden' },
     cellImage: { width: '100%', height: '100%' },
-    noThumb: { flex: 1, backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-    noThumbIcon: { fontSize: 24 }, // Keeping just in case
+    noThumb: { flex: 1, backgroundColor: '#f1f3f4', justifyContent: 'center', alignItems: 'center' },
+    
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#222', marginBottom: 8 },
-    fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2196F3', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
-    fabText: { color: '#fff', fontSize: 22, fontWeight: '400', marginTop: -2 },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
+    
+    fab: { 
+        position: 'absolute', 
+        right: 20, 
+        width: 56, 
+        height: 56, 
+        borderRadius: 16, 
+        backgroundColor: '#1a73e8', // Google Blue
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        elevation: 6, 
+        shadowColor: '#000', 
+        shadowOffset: { width: 0, height: 3 }, 
+        shadowOpacity: 0.25, 
+        shadowRadius: 5 
+    },
 });

@@ -270,7 +270,7 @@ const GalleryScreen = () => {
 
                             {mediaItem.is_favorite && !selectionMode && (
                                 <View style={styles.favoriteBadge}>
-                                    <Heart size={14} color="#fff" fill="#fff" />
+                                    <Heart size={16} color="#FF3B30" fill="#FF3B30" />
                                 </View>
                             )}
 
@@ -542,8 +542,6 @@ const styles = StyleSheet.create({
         top: 6, 
         left: 6, 
         padding: 4,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        borderRadius: 12,
     },
 
     selectionOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 6 },

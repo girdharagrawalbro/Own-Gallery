@@ -6,7 +6,6 @@ import {
     FlatList,
     Pressable,
     RefreshControl,
-    SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -14,7 +13,8 @@ import {
     ToastAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { ImageOff, Trash2, Info } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ImageOff, Trash2 } from 'lucide-react-native';
 
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import VideoThumbnail from '../../components/VideoThumbnail';
@@ -26,6 +26,8 @@ const CELL = (width - 4) / 3;
 
 const TrashScreen = () => {
     const navigation = useNavigation();
+    const insets = useSafeAreaInsets();
+    
     const [media, setMedia] = useState<Media[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -143,17 +145,17 @@ const TrashScreen = () => {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#FF3B30" />
-            </SafeAreaView>
+            <View style={styles.centerContainer}>
+                <ActivityIndicator size="large" color="#1a73e8" />
+            </View>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
+        <View style={styles.container}>
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
                 <View>
-                    <Text style={styles.heading}>Recently Deleted</Text>
+                    <Text style={styles.heading}>Trash</Text>
                     <Text style={styles.subheading}>{media.length} items</Text>
                 </View>
                 <TouchableOpacity onPress={handleEmptyTrash} disabled={media.length === 0}>
@@ -166,7 +168,8 @@ const TrashScreen = () => {
                 numColumns={3}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF3B30" />}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a73e8" />}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <Trash2 size={64} color="#ccc" style={{ marginBottom: 16 }} />
@@ -179,7 +182,7 @@ const TrashScreen = () => {
                     index,
                 })}
             />
-        </SafeAreaView>
+        </View>
     );
 };
 
@@ -188,17 +191,27 @@ export default TrashScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
-    heading: { fontSize: 22, fontWeight: '800', color: '#111', letterSpacing: -0.5 },
-    subheading: { fontSize: 13, color: '#999', marginTop: 2 },
-    emptyBtnText: { color: '#FF3B30', fontSize: 16, fontWeight: '600' },
-    emptyBtnDisabled: { color: '#ffa39e' },
-    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#eee', overflow: 'hidden' },
+    
+    header: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        paddingHorizontal: 16, 
+        paddingBottom: 16, 
+        backgroundColor: '#fff',
+    },
+    heading: { fontSize: 28, fontWeight: '700', color: '#3c4043', letterSpacing: -0.5 },
+    subheading: { fontSize: 13, color: '#5f6368', marginTop: 2 },
+    emptyBtnText: { color: '#1a73e8', fontSize: 16, fontWeight: '600' },
+    emptyBtnDisabled: { color: '#8ab4f8' },
+    
+    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#f1f3f4', overflow: 'hidden' },
     cellImage: { width: '100%', height: '100%' },
-    noThumb: { flex: 1, backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-    noThumbIcon: { fontSize: 24 }, // Keeping just in case
+    noThumb: { flex: 1, backgroundColor: '#f1f3f4', justifyContent: 'center', alignItems: 'center' },
+    
     trashOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4 },
     trashOverlayText: { color: '#fff', fontSize: 10, textAlign: 'center' },
+    
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#222', marginBottom: 8 },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
 });
