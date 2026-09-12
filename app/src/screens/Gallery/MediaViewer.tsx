@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import {
     Dimensions,
     FlatList,
@@ -9,15 +9,18 @@ import {
     View,
     Alert,
     ActivityIndicator,
-    ToastAndroid
+    ToastAndroid,
+    Animated,
+    TouchableWithoutFeedback
 } from 'react-native';
 import Share from 'react-native-share';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ZoomableImage from '../../components/ZoomableImage';
 import VideoPlayer from '../../components/VideoPlayer';
 import { Media } from '../../types/media';
 import { toggleFavorite, moveToTrash, downloadMediaToDevice } from '../../api/media';
-import { Share as ShareIcon, Download, Heart, Trash2, X, FolderPlus, Info, Link as LinkIcon } from 'lucide-react-native';
+import { Share as ShareIcon, Download, Heart, Trash2, X, FolderPlus, Info, Link as LinkIcon, MoreVertical, ArrowLeft } from 'lucide-react-native';
 import SelectAlbumModal from '../Albums/SelectAlbumModal';
 import { Share as RNShare } from 'react-native';
 import { createShareLink } from '../../api/media';
@@ -41,11 +44,26 @@ const MediaViewer = ({
     onMediaUpdated,
     onMediaDeleted,
 }: Props) => {
+    const insets = useSafeAreaInsets();
     const listRef = useRef<FlatList<Media>>(null);
     const [activeIndex, setActiveIndex] = useState(initialIndex);
     const [isProcessing, setIsProcessing] = useState(false);
     const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
     const [infoVisible, setInfoVisible] = useState(false);
+    
+    // UI visibility toggle
+    const [uiVisible, setUiVisible] = useState(true);
+    const uiOpacity = useRef(new Animated.Value(1)).current;
+
+    const toggleUi = () => {
+        const nextVisible = !uiVisible;
+        setUiVisible(nextVisible);
+        Animated.timing(uiOpacity, {
+            toValue: nextVisible ? 1 : 0,
+            duration: 200,
+            useNativeDriver: true,
+        }).start();
+    };
 
     const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
         if (viewableItems.length > 0) {
@@ -95,7 +113,7 @@ const MediaViewer = ({
         if (!item) return;
         setIsProcessing(true);
         try {
-            const updated = await toggleFavorite(item.id);
+            const updated = await toggleFavorite(item.id, !item.is_favorite);
             if (onMediaUpdated) {
                 onMediaUpdated(updated);
             }
@@ -172,80 +190,87 @@ const MediaViewer = ({
             visible={visible}
             animationType="fade"
             presentationStyle="fullScreen"
-            onRequestClose={onClose}>
-
+            onRequestClose={onClose}
+        >
             <View style={styles.container}>
-
-                <View style={styles.topActions}>
-                    <Pressable style={styles.actionButton} onPress={handleShare} disabled={isProcessing}>
-                        <ShareIcon size={20} color="white" />
-                    </Pressable>
-                    
-                    <Pressable style={styles.actionButton} onPress={handleCopyLink} disabled={isProcessing}>
-                        <LinkIcon size={20} color="white" />
-                    </Pressable>
-
-                    <Pressable style={styles.actionButton} onPress={handleDownload} disabled={isProcessing}>
-                        <Download size={20} color="white" />
-                    </Pressable>
-
-                    <Pressable style={styles.actionButton} onPress={handleToggleFavorite} disabled={isProcessing}>
-                        <Heart 
-                            size={20} 
-                            color={currentItem?.is_favorite ? "#FF3B30" : "white"} 
-                            fill={currentItem?.is_favorite ? "#FF3B30" : "transparent"} 
+                {/* Image/Video Carousel wrapped in TouchableWithoutFeedback to toggle UI */}
+                <TouchableWithoutFeedback onPress={toggleUi}>
+                    <View style={StyleSheet.absoluteFill}>
+                        <FlatList
+                            ref={listRef}
+                            data={media}
+                            horizontal
+                            pagingEnabled
+                            showsHorizontalScrollIndicator={false}
+                            initialScrollIndex={initialIndex}
+                            keyExtractor={item => item.id.toString()}
+                            getItemLayout={(_, index) => ({
+                                length: width,
+                                offset: width * index,
+                                index,
+                            })}
+                            onViewableItemsChanged={onViewableItemsChanged}
+                            viewabilityConfig={viewabilityConfig}
+                            renderItem={({ item, index }) => (
+                                <View style={styles.page}>
+                                    {item.media_type === 'image' ? (
+                                        <ZoomableImage uri={item.content_url} isActive={index === activeIndex} />
+                                    ) : (
+                                        <VideoPlayer uri={item.content_url} isActive={index === activeIndex} />
+                                    )}
+                                </View>
+                            )}
                         />
-                    </Pressable>
+                    </View>
+                </TouchableWithoutFeedback>
 
-                    <Pressable style={styles.actionButton} onPress={() => setSelectAlbumVisible(true)} disabled={isProcessing}>
-                        <FolderPlus size={20} color="white" />
+                {/* Top Action Bar */}
+                <Animated.View style={[styles.topBar, { paddingTop: insets.top + 10, opacity: uiOpacity }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
+                    <Pressable style={styles.actionButton} onPress={onClose} hitSlop={15}>
+                        <ArrowLeft size={24} color="white" />
                     </Pressable>
+                    <View style={styles.topRightActions}>
+                        <Pressable style={styles.actionButton} onPress={handleToggleFavorite} disabled={isProcessing} hitSlop={15}>
+                            <Heart 
+                                size={24} 
+                                color={currentItem?.is_favorite ? "#FF3B30" : "white"} 
+                                fill={currentItem?.is_favorite ? "#FF3B30" : "transparent"} 
+                            />
+                        </Pressable>
+                        <Pressable style={styles.actionButton} onPress={handleCopyLink} disabled={isProcessing} hitSlop={15}>
+                            <LinkIcon size={24} color="white" />
+                        </Pressable>
+                        <Pressable style={styles.actionButton} onPress={() => setInfoVisible(true)} disabled={isProcessing} hitSlop={15}>
+                            <MoreVertical size={24} color="white" />
+                        </Pressable>
+                    </View>
+                </Animated.View>
 
-                    <Pressable style={styles.actionButton} onPress={() => setInfoVisible(true)} disabled={isProcessing}>
-                        <Info size={20} color="white" />
+                {/* Bottom Action Bar */}
+                <Animated.View style={[styles.bottomBar, { paddingBottom: insets.bottom + 20, opacity: uiOpacity }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
+                    <Pressable style={styles.bottomActionButton} onPress={handleShare} disabled={isProcessing}>
+                        <ShareIcon size={22} color="white" />
+                        <Text style={styles.bottomActionText}>Share</Text>
                     </Pressable>
-
-                    <Pressable style={styles.actionButton} onPress={handleDelete} disabled={isProcessing}>
-                        <Trash2 size={20} color="white" />
+                    <Pressable style={styles.bottomActionButton} onPress={() => setSelectAlbumVisible(true)} disabled={isProcessing}>
+                        <FolderPlus size={22} color="white" />
+                        <Text style={styles.bottomActionText}>Add to</Text>
                     </Pressable>
-
-                    <Pressable style={styles.actionButton} onPress={onClose} disabled={isProcessing}>
-                        <X size={20} color="white" />
+                    <Pressable style={styles.bottomActionButton} onPress={handleDownload} disabled={isProcessing}>
+                        <Download size={22} color="white" />
+                        <Text style={styles.bottomActionText}>Save</Text>
                     </Pressable>
-                </View>
+                    <Pressable style={styles.bottomActionButton} onPress={handleDelete} disabled={isProcessing}>
+                        <Trash2 size={22} color="white" />
+                        <Text style={styles.bottomActionText}>Delete</Text>
+                    </Pressable>
+                </Animated.View>
 
                 {isProcessing && (
                     <View style={styles.processingOverlay}>
                         <ActivityIndicator size="large" color="#fff" />
                     </View>
                 )}
-
-                <FlatList
-                    ref={listRef}
-                    data={media}
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    initialScrollIndex={initialIndex}
-                    keyExtractor={item => item.id.toString()}
-                    getItemLayout={(_, index) => ({
-                        length: width,
-                        offset: width * index,
-                        index,
-                    })}
-                    onViewableItemsChanged={onViewableItemsChanged}
-                    viewabilityConfig={viewabilityConfig}
-                    renderItem={({ item, index }) => (
-                        <View style={styles.page}>
-                            {item.media_type === 'image' ? (
-                                <ZoomableImage uri={item.content_url} isActive={index === activeIndex} />
-                            ) : (
-                                <VideoPlayer uri={item.content_url} isActive={index === activeIndex} />
-                            )}
-                        </View>
-                    )}
-                />
-
             </View>
 
             <SelectAlbumModal
@@ -254,6 +279,7 @@ const MediaViewer = ({
                 onClose={() => setSelectAlbumVisible(false)}
             />
 
+            {/* Info / Details Modal */}
             <Modal
                 visible={infoVisible}
                 transparent
@@ -284,11 +310,9 @@ const MediaViewer = ({
                             <Text style={styles.infoLabel}>Type</Text>
                             <Text style={styles.infoValue}>{currentItem?.mime_type || currentItem?.media_type}</Text>
                         </View>
-
                     </Pressable>
                 </Pressable>
             </Modal>
-
         </Modal>
     );
 };
@@ -298,24 +322,49 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'black',
     },
-    topActions: {
+    topBar: {
         position: 'absolute',
-        top: 40,
+        top: 0,
         left: 0,
         right: 0,
         flexDirection: 'row',
-        justifyContent: 'flex-end',
-        zIndex: 10,
+        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 16,
-        gap: 8,
+        paddingBottom: 16,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        zIndex: 10,
+    },
+    topRightActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 20,
     },
     actionButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
+        padding: 4,
+    },
+    bottomBar: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        justifyContent: 'space-around',
         alignItems: 'center',
+        paddingTop: 16,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        zIndex: 10,
+    },
+    bottomActionButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: 70,
+    },
+    bottomActionText: {
+        color: 'white',
+        fontSize: 12,
+        marginTop: 6,
+        fontWeight: '500',
     },
     page: {
         width,
@@ -324,7 +373,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     processingOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
@@ -333,11 +382,12 @@ const styles = StyleSheet.create({
     infoOverlay: {
         flex: 1,
         justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.4)'
     },
     infoSheet: {
         backgroundColor: '#1c1c1e',
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
         padding: 24,
         paddingBottom: 40,
         minHeight: 300,
@@ -351,15 +401,15 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     infoTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: 22,
+        fontWeight: '700',
         color: '#fff',
         marginBottom: 20,
     },
     infoRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        paddingVertical: 12,
+        paddingVertical: 14,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: '#333',
     },

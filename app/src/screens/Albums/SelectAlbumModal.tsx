@@ -137,5 +137,5 @@ const styles = StyleSheet.create({
     albumName: { fontSize: 16, fontWeight: '600', color: '#111' },
     emptyState: { alignItems: 'center', marginTop: 40 },
     emptyText: { color: '#888', fontSize: 16 },
-    addingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    addingOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
 });

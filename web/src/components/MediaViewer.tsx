@@ -1,6 +1,8 @@
-import React from 'react';
-import { X, Info, Download, Trash2, Heart } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Info, Download, Trash2, Heart, Share2, Copy } from 'lucide-react';
 import { apiClient } from '../api/client';
+import AuthenticatedImage from './AuthenticatedImage';
+import AuthenticatedVideo from './AuthenticatedVideo';
 
 interface MediaItem {
   id: number;
@@ -24,7 +26,8 @@ interface MediaViewerProps {
 }
 
 const MediaViewer: React.FC<MediaViewerProps> = ({ media, currentIndex, onClose, onDelete, onToggleFavorite }) => {
-  const [showInfo, setShowInfo] = React.useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
   const currentItem = media[currentIndex];
 
   if (!currentItem) return null;
@@ -34,6 +37,23 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ media, currentIndex, onClose,
     link.href = currentItem.content_url;
     link.download = currentItem.filename;
     link.click();
+  };
+
+  const handleShare = async () => {
+    try {
+      const response = await apiClient.post(`/media/${currentItem.id}/share/`);
+      setShareLink(response.data.url);
+    } catch (err) {
+      console.error('Failed to generate share link', err);
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (shareLink) {
+      navigator.clipboard.writeText(shareLink);
+      alert('Link copied to clipboard!');
+      setShareLink(null);
+    }
   };
 
   const formatBytes = (bytes: number) => {
@@ -65,6 +85,9 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ media, currentIndex, onClose,
         gap: '16px',
         zIndex: 1010
       }}>
+        <button className="btn-icon" onClick={handleShare} title="Share Publicly">
+          <Share2 size={24} color="white" />
+        </button>
         <button className="btn-icon" onClick={handleDownload} title="Download">
           <Download size={24} color="white" />
         </button>
@@ -85,13 +108,13 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ media, currentIndex, onClose,
       {/* Main Content */}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
         {currentItem.media_type === 'image' ? (
-          <img 
+          <AuthenticatedImage 
             src={currentItem.content_url} 
             alt={currentItem.filename}
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
           />
         ) : (
-          <video 
+          <AuthenticatedVideo 
             src={currentItem.content_url} 
             controls
             autoPlay
@@ -127,6 +150,71 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ media, currentIndex, onClose,
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: '#aaa' }}>Format</span>
             <span>{currentItem.media_type}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Share Link Modal */}
+      {shareLink && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: '16px',
+          padding: '24px',
+          width: '90%',
+          maxWidth: '400px',
+          zIndex: 2000,
+          color: 'white',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0 }}>Share Public Link</h3>
+            <button className="btn-icon" onClick={() => setShareLink(null)}>
+              <X size={20} color="white" />
+            </button>
+          </div>
+          <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '16px' }}>Anyone with this link can view this media.</p>
+          
+          <div style={{ 
+            display: 'flex', 
+            background: 'rgba(0,0,0,0.3)', 
+            borderRadius: '8px', 
+            border: '1px solid rgba(255,255,255,0.1)',
+            overflow: 'hidden'
+          }}>
+            <input 
+              type="text" 
+              value={shareLink} 
+              readOnly 
+              style={{ 
+                flex: 1, 
+                background: 'transparent', 
+                border: 'none', 
+                color: 'white', 
+                padding: '12px',
+                outline: 'none'
+              }} 
+            />
+            <button 
+              onClick={copyToClipboard}
+              style={{
+                background: 'var(--primary-color)',
+                border: 'none',
+                padding: '0 16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Copy size={18} color="white" />
+            </button>
           </div>
         </div>
       )}

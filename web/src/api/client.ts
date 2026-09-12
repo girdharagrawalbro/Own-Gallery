@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Get base URL from environment or use local dev default
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const baseURL = import.meta.env.VITE_API_URL || 'https://own-gallery-api.ambitioushill-a50180b1.koreacentral.azurecontainerapps.io/api';
 
 export const apiClient = axios.create({
   baseURL,
@@ -14,8 +14,8 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('auth_token');
-    if (token && !config.headers.Authorization) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers.set('Authorization', `Bearer ${token}`);
     }
     return config;
   },

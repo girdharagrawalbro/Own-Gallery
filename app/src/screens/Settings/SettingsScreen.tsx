@@ -15,6 +15,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import RNFS from 'react-native-fs';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile, changePassword } from '../../api/auth';
 import { getStats } from '../../api/media';

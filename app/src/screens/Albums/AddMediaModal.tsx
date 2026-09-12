@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     cellImage: { width: '100%', height: '100%' },
     noThumb: { flex: 1, backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
     noThumbIcon: { fontSize: 24 }, // Keeping just in case
-    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderWidth: 2, borderColor: '#007AFF' },
+    overlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(255, 255, 255, 0.4)', borderWidth: 2, borderColor: '#007AFF' },
     checkBadge: { position: 'absolute', bottom: 8, right: 8, width: 20, height: 20, borderRadius: 12, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center' },
     footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#eee' },
     addBtn: { backgroundColor: '#007AFF', paddingVertical: 14, borderRadius: 8, alignItems: 'center' },

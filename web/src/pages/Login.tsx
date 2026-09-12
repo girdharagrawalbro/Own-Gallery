@@ -66,7 +66,7 @@ const Login = () => {
           </div>
         </div>
 
-        <h1 style={{ marginBottom: '24  px', fontSize: '24px' }}>Login to your Gallery</h1>
+        <h1 style={{ marginBottom: '24px', fontSize: '24px' }}>Login to your Gallery</h1>
 
         {error && (
           <div style={{

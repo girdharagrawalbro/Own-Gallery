@@ -134,7 +134,7 @@ const TrashScreen = () => {
             )}
 
             <View style={styles.trashOverlay}>
-                <Text style={styles.trashOverlayText}>{item.deleted_at ? new Date(item.deleted_at).toLocaleDateString() : 'Deleted'}</Text>
+                <Text style={styles.trashOverlayText}>{item.created_at ? new Date(item.created_at).toLocaleDateString() : 'Deleted'}</Text>
             </View>
         </Pressable>
     ), []);

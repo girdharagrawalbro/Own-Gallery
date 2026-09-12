@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
-import { Image as ImageIcon, Play, Heart, Trash2, Check, FolderPlus } from 'lucide-react';
-import UploadZone from '../components/UploadZone';
+import { Play, Heart, HeartOff, Check } from 'lucide-react';
 import MediaViewer from '../components/MediaViewer';
 import AuthenticatedImage from '../components/AuthenticatedImage';
-import SelectAlbumModal from '../components/SelectAlbumModal';
 
 interface MediaItem {
   id: number;
@@ -19,27 +17,36 @@ interface MediaItem {
   created_at: string;
 }
 
-const MediaGrid = () => {
+const Favorites = () => {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [showSelectAlbum, setShowSelectAlbum] = useState(false);
 
   useEffect(() => {
-    fetchMedia();
+    fetchFavorites();
   }, []);
 
-  const fetchMedia = async () => {
+  const fetchFavorites = async () => {
     try {
-      const response = await apiClient.get('/media/');
+      const response = await apiClient.get('/media/?is_favorite=true');
       const items = response.data.results ? response.data.results : response.data;
       setMedia(Array.isArray(items) ? items : []);
     } catch (error) {
-      console.error('Failed to fetch media', error);
+      console.error('Failed to fetch favorites', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleFavorite = async (id: number) => {
+    try {
+      await apiClient.post(`/media/${id}/favorite/`, { is_favorite: false });
+      setMedia(media.filter(m => m.id !== id));
+      setViewerIndex(null);
+    } catch (err) {
+      console.error('Failed to toggle favorite', err);
     }
   };
 
@@ -53,87 +60,48 @@ const MediaGrid = () => {
     }
   };
 
-  const handleToggleFavorite = async (id: number) => {
-    try {
-      const current = media.find(m => m.id === id);
-      if (!current) return;
-      await apiClient.post(`/media/${id}/favorite/`, { is_favorite: !current.is_favorite });
-      setMedia(media.map(m => m.id === id ? { ...m, is_favorite: !current.is_favorite } : m));
-    } catch (err) {
-      console.error('Failed to toggle favorite', err);
-    }
-  };
-
   const handleToggleSelection = (id: number) => {
     setSelectedIds(prev => 
       prev.includes(id) ? prev.filter(selectedId => selectedId !== id) : [...prev, id]
     );
   };
 
-  const handleBulkTrash = async () => {
+  const handleBulkUnfavorite = async () => {
     if (selectedIds.length === 0) return;
     try {
-      await apiClient.post('/media/bulk-trash/', { media_ids: selectedIds });
+      await apiClient.post('/media/bulk-favorite/', { media_ids: selectedIds, is_favorite: false });
       setMedia(media.filter(m => !selectedIds.includes(m.id)));
       setSelectedIds([]);
       setIsSelectionMode(false);
     } catch (err) {
-      console.error('Failed to bulk trash', err);
-    }
-  };
-
-  const handleBulkFavorite = async () => {
-    if (selectedIds.length === 0) return;
-    try {
-      await apiClient.post('/media/bulk-favorite/', { media_ids: selectedIds, is_favorite: true });
-      setMedia(media.map(m => selectedIds.includes(m.id) ? { ...m, is_favorite: true } : m));
-      setSelectedIds([]);
-      setIsSelectionMode(false);
-    } catch (err) {
-      console.error('Failed to bulk favorite', err);
-    }
-  };
-
-  const handleAddToAlbum = async (albumId: number) => {
-    if (selectedIds.length === 0) return;
-    try {
-      await apiClient.post(`/albums/${albumId}/add-media/`, { media_ids: selectedIds });
-      setShowSelectAlbum(false);
-      setSelectedIds([]);
-      setIsSelectionMode(false);
-      alert('Added to album successfully');
-    } catch (error) {
-      console.error('Failed to add to album', error);
-      alert('Failed to add to album');
+      console.error('Failed to bulk unfavorite', err);
     }
   };
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: '500' }}>Favorites</h1>
         {media.length > 0 && (
           <button 
             className="btn-icon" 
             onClick={() => setIsSelectionMode(!isSelectionMode)} 
             style={{ background: isSelectionMode ? 'var(--accent-bg)' : 'transparent', color: isSelectionMode ? 'var(--accent-color)' : 'var(--text-secondary)' }}
-            title="Select Items"
           >
             <Check size={20} />
           </button>
         )}
-      </div>
-
-      <UploadZone onUploadSuccess={fetchMedia} />
+      </header>
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-          Loading your media...
+          Loading your favorites...
         </div>
       ) : media.length === 0 ? (
         <div className="glass-panel animate-fade-in" style={{ textAlign: 'center', padding: '64px 20px', background: 'var(--bg-secondary)', border: 'none' }}>
-          <ImageIcon size={48} color="var(--text-secondary)" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-          <h2 style={{ fontSize: '18px', fontWeight: '500' }}>No photos yet</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Upload some photos or videos to get started.</p>
+          <Heart size={48} color="var(--text-secondary)" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+          <h2 style={{ fontSize: '18px', fontWeight: '500' }}>No favorites yet</h2>
+          <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Star your favorite photos to see them here.</p>
         </div>
       ) : (
         <div style={{
@@ -202,24 +170,11 @@ const MediaGrid = () => {
         }}>
           <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{selectedIds.length} selected</span>
           <div style={{ display: 'flex', gap: '16px' }}>
-            <button onClick={handleBulkFavorite} className="btn-icon" title="Favorite">
-              <Heart size={20} />
-            </button>
-            <button onClick={() => setShowSelectAlbum(true)} className="btn-icon" title="Add to Album">
-              <FolderPlus size={20} />
-            </button>
-            <button onClick={handleBulkTrash} className="btn-icon" title="Trash" style={{ color: 'var(--danger-color)' }}>
-              <Trash2 size={20} />
+            <button onClick={handleBulkUnfavorite} className="btn-icon" title="Remove from favorites">
+              <HeartOff size={20} />
             </button>
           </div>
         </div>
-      )}
-
-      {showSelectAlbum && (
-        <SelectAlbumModal 
-          onClose={() => setShowSelectAlbum(false)} 
-          onSelect={handleAddToAlbum} 
-        />
       )}
 
       {viewerIndex !== null && (
@@ -235,4 +190,4 @@ const MediaGrid = () => {
   );
 };
 
-export default MediaGrid;
+export default Favorites;

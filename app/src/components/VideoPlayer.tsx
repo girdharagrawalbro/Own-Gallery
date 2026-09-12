@@ -26,7 +26,7 @@ const VideoPlayer = ({ uri, isActive }: Props) => {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<any>(null);
 
   useEffect(() => {
     const loadToken = async () => {
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -30,20 +30,36 @@ const AppNavigator = () => {
         <Tab.Navigator
           screenOptions={({ route }) => ({
             headerShown: false,
-            tabBarStyle: { backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
-            tabBarActiveTintColor: '#2196F3',
-            tabBarInactiveTintColor: '#999',
-            tabBarIcon: ({ color, size }) => {
+            tabBarStyle: { 
+              backgroundColor: '#fff', 
+              borderTopWidth: 0, 
+              elevation: 8, 
+              shadowColor: '#000', 
+              shadowOffset: { width: 0, height: -2 }, 
+              shadowOpacity: 0.1, 
+              shadowRadius: 3,
+              height: 60,
+              paddingBottom: 8,
+              paddingTop: 8,
+            },
+            tabBarActiveTintColor: '#1a73e8', // Google Blue
+            tabBarInactiveTintColor: '#5f6368', // Google Grey
+            tabBarLabelStyle: {
+              fontSize: 12,
+              fontWeight: '500',
+            },
+            tabBarIcon: ({ color, size, focused }) => {
+              const iconProps = { color, size: 24, strokeWidth: focused ? 2.5 : 2 };
               if (route.name === 'Gallery') {
-                return <ImageIcon color={color} size={size} />;
+                return <ImageIcon {...iconProps} />;
               } else if (route.name === 'AlbumsTab') {
-                return <Folder color={color} size={size} />;
+                return <Folder {...iconProps} />;
               } else if (route.name === 'Favorites') {
-                return <Heart color={color} size={size} />;
+                return <Heart {...iconProps} fill={focused ? color : 'transparent'} />;
               } else if (route.name === 'Trash') {
-                return <Trash2 color={color} size={size} />;
+                return <Trash2 {...iconProps} />;
               } else if (route.name === 'Settings') {
-                return <Settings color={color} size={size} />;
+                return <Settings {...iconProps} />;
               }
             },
           })}

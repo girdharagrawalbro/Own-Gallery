@@ -6,27 +6,28 @@ import {
     FlatList,
     Pressable,
     RefreshControl,
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
     ToastAndroid,
+    Animated,
+    Keyboard,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 
-import { useNavigation } from '@react-navigation/native';
-import { ImageOff, Heart, Check, Image as ImageIcon, Trash2, X, Plus, Info, Download } from 'lucide-react-native';
+import { ImageOff, Heart, Check, Image as ImageIcon, Trash2, X, Plus, Search, Download, FolderPlus } from 'lucide-react-native';
 import AuthenticatedImage from '../../components/AuthenticatedImage';
 import MediaViewer from './MediaViewer';
-import SkeletonGrid from '../../components/SkeletonGrid';
 import VideoThumbnail from '../../components/VideoThumbnail';
 import { prefetchThumbnails } from '../../utils/prefetch';
-import { getMedia, uploadMedia, bulkTrash, bulkFavorite, downloadMediaToDevice } from '../../api/media';
+import { getMedia, bulkTrash, bulkFavorite, downloadMediaToDevice } from '../../api/media';
 import { Media } from '../../types/media';
 import { useAuth } from '../../context/AuthContext';
 import UploadPreviewModal from './UploadPreviewModal';
+import SelectAlbumModal from '../Albums/SelectAlbumModal';
 
 const { width } = Dimensions.get('window');
 const CELL = (width - 4) / 3;
@@ -39,8 +40,8 @@ type ListItem =
 
 const GalleryScreen = () => {
     const { logout, user } = useAuth();
-    const navigation = useNavigation();
-
+    const insets = useSafeAreaInsets();
+    
     const [media, setMedia] = useState<Media[]>([]);
     const [loadState, setLoadState] = useState<LoadState>('loading');
     const [error, setError] = useState<string | null>(null);
@@ -53,13 +54,24 @@ const GalleryScreen = () => {
     const [previewVisible, setPreviewVisible] = useState(false);
     const [selectedAssets, setSelectedAssets] = useState<Asset[]>([]);
 
-    // Filter/Search State
     const [searchQuery, setSearchQuery] = useState('');
-    const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video'>('all');
-
+    
     // Selection State
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    
+    const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
+
+    // Animations
+    const selectionAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(selectionAnim, {
+            toValue: selectionMode ? 1 : 0,
+            duration: 250,
+            useNativeDriver: true,
+        }).start();
+    }, [selectionMode]);
 
     const isMounted = useRef(true);
     useEffect(() => {
@@ -78,9 +90,8 @@ const GalleryScreen = () => {
         setError(null);
 
         try {
-            const filterType = mediaFilter === 'all' ? undefined : mediaFilter;
             const search = searchQuery.trim() || undefined;
-            const response = await getMedia(pageNumber, false, search, filterType);
+            const response = await getMedia(pageNumber, false, search, undefined);
 
             if (!isMounted.current) { return; }
 
@@ -110,25 +121,24 @@ const GalleryScreen = () => {
             setError(err?.response?.data?.detail || err?.message || 'Failed to load media.');
             setLoadState('error');
         }
-    }, [logout, searchQuery, mediaFilter]);
+    }, [logout, searchQuery]);
 
     useEffect(() => {
-        // Debounce search slightly
         const timeout = setTimeout(() => {
-            fetchMedia(1, 'loading');
+            fetchMedia(1, 'initial');
         }, 300);
         return () => clearTimeout(timeout);
-    }, [searchQuery, mediaFilter]);
+    }, [searchQuery]);
 
     const onRefresh = useCallback(() => {
-        fetchMedia(1, 'refreshing');
-    }, [searchQuery, mediaFilter]);
+        fetchMedia(1, 'refresh');
+    }, [fetchMedia]);
 
     const onEndReached = useCallback(() => {
         if (loadState === 'idle' && hasMore) {
-            fetchMedia(page + 1, 'loadingMore');
+            fetchMedia(page + 1, 'more');
         }
-    }, [loadState, hasMore, page, searchQuery, mediaFilter]);
+    }, [loadState, hasMore, page, fetchMedia]);
 
     const handleUpload = async () => {
         const result = await launchImageLibrary({
@@ -209,7 +219,6 @@ const GalleryScreen = () => {
         const result: ListItem[] = [];
         for (const [dateStr, items] of Object.entries(groups)) {
             result.push({ type: 'header', title: dateStr, id: `header-${dateStr}`, mediaIds: items.map(m => m.id) });
-            // Chunk into rows of 3
             for (let i = 0; i < items.length; i += 3) {
                 const chunk = items.slice(i, i + 3);
                 result.push({ type: 'row', items: chunk, id: `row-${chunk[0].id}` });
@@ -246,17 +255,22 @@ const GalleryScreen = () => {
                             onPress={() => handleMediaPress(mediaItem)}
                             onLongPress={() => handleMediaLongPress(mediaItem)}
                         >
-                            {mediaItem.media_type === 'video' ? (
-                                <VideoThumbnail thumbnailUrl={mediaItem.thumbnail_url} duration={mediaItem.duration} />
-                            ) : mediaItem.thumbnail_url ? (
-                                <AuthenticatedImage uri={mediaItem.thumbnail_url} style={styles.cellImage} resizeMode="cover" />
-                            ) : (
-                                <View style={styles.noThumb}><ImageOff size={24} color="#ccc" /></View>
-                            )}
+                            <Animated.View style={[
+                                styles.cellImageContainer,
+                                isSelected && { transform: [{ scale: 0.85 }], borderRadius: 12 }
+                            ]}>
+                                {mediaItem.media_type === 'video' ? (
+                                    <VideoThumbnail thumbnailUrl={mediaItem.thumbnail_url} duration={mediaItem.duration} />
+                                ) : mediaItem.thumbnail_url ? (
+                                    <AuthenticatedImage uri={mediaItem.thumbnail_url} style={styles.cellImage} resizeMode="cover" />
+                                ) : (
+                                    <View style={styles.noThumb}><ImageOff size={24} color="#ccc" /></View>
+                                )}
+                            </Animated.View>
 
                             {mediaItem.is_favorite && !selectionMode && (
                                 <View style={styles.favoriteBadge}>
-                                    <Heart size={12} color="red" fill="red" />
+                                    <Heart size={14} color="#fff" fill="#fff" />
                                 </View>
                             )}
 
@@ -278,7 +292,6 @@ const GalleryScreen = () => {
                         </Pressable>
                     );
                 })}
-                {/* Pad empty cells in row */}
                 {Array.from({ length: 3 - item.items.length }).map((_, i) => (
                     <View key={`empty-${i}`} style={[styles.cell, { backgroundColor: 'transparent' }]} />
                 ))}
@@ -332,36 +345,32 @@ const GalleryScreen = () => {
         }
     };
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.heading}>Welcome, {user?.first_name || 'User'}</Text>
-            </View>
+    const handleAddAlbum = () => {
+        setSelectAlbumVisible(true);
+    };
 
-            <View style={styles.filters}>
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholderTextColor="#888"
-                />
-                <View style={styles.filterChips}>
-                    {(['all', 'image', 'video'] as const).map(type => (
-                        <TouchableOpacity
-                            key={type}
-                            style={[styles.chip, mediaFilter === type && styles.chipActive]}
-                            onPress={() => setMediaFilter(type)}
-                        >
-                            <Text style={[styles.chipText, mediaFilter === type && styles.chipTextActive]}>
-                                {type.charAt(0).toUpperCase() + type.slice(1)}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+    return (
+        <View style={styles.container}>
+            {/* Search Pill */}
+            <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16) }]}>
+                <View style={styles.searchPill}>
+                    <Search size={20} color="#777" style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search your photos"
+                        placeholderTextColor="#777"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        returnKeyType="search"
+                        onSubmitEditing={() => Keyboard.dismiss()}
+                    />
+                    <View style={styles.profileAvatar}>
+                        <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
+                    </View>
                 </View>
             </View>
 
-            {loadState === 'loading' ? (
+            {loadState === 'loading' && media.length === 0 ? (
                 <View style={styles.centerContainer}>
                     <ActivityIndicator size="large" color="#007AFF" />
                 </View>
@@ -371,49 +380,76 @@ const GalleryScreen = () => {
                     extraData={selectedIds}
                     keyExtractor={item => item.id}
                     renderItem={renderItem}
+                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 100 }}
+                    // Performance Props for smoothness
+                    windowSize={11}
+                    maxToRenderPerBatch={10}
+                    updateCellsBatchingPeriod={50}
+                    removeClippedSubviews={true}
+                    initialNumToRender={10}
                     refreshControl={<RefreshControl refreshing={loadState === 'refreshing'} onRefresh={onRefresh} />}
                     onEndReached={onEndReached}
                     onEndReachedThreshold={0.5}
                     ListFooterComponent={
                         loadState === 'loadingMore' ? (
                             <ActivityIndicator style={styles.footerSpinner} color="#555" />
-                        ) : null
+                        ) : <></>
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
                             <ImageIcon size={64} color="#ccc" style={{ marginBottom: 16 }} />
-                            <Text style={styles.emptyTitle}>Gallery is empty</Text>
-                            <Text style={styles.emptySubtitle}>Tap the + button to upload photos and videos</Text>
+                            <Text style={styles.emptyTitle}>No photos found</Text>
                         </View>
                     }
                 />
             )}
 
             {!selectionMode && (
-                <TouchableOpacity style={styles.fab} onPress={handleUpload}>
-                    <Plus size={32} color="#fff" />
+                <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 16, 16) }]} onPress={handleUpload}>
+                    <Plus size={28} color="#fff" />
                 </TouchableOpacity>
             )}
 
-            {selectionMode && (
-                <View style={styles.bottomBar}>
-                    <Text style={styles.selectionCount}>{selectedIds.size} Selected</Text>
+            {/* Sliding Bottom Action Bar for Selection Mode */}
+            <Animated.View style={[
+                styles.bottomBar,
+                { 
+                    paddingBottom: Math.max(insets.bottom, 16),
+                    transform: [{
+                        translateY: selectionAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [150, 0] // Slide up from bottom
+                        })
+                    }]
+                }
+            ]}>
+                <View style={styles.bottomBarContent}>
+                    <View style={styles.selectionTitleRow}>
+                        <TouchableOpacity onPress={() => setSelectionMode(false)} style={styles.closeSelectBtn}>
+                            <X size={24} color="#444" />
+                        </TouchableOpacity>
+                        <Text style={styles.selectionCount}>{selectedIds.size} selected</Text>
+                    </View>
                     <View style={styles.bottomBarActions}>
-                        <TouchableOpacity onPress={handleBulkTrash}>
-                            <Trash2 size={24} />
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleAddAlbum}>
+                            <FolderPlus size={24} color="#444" />
+                            <Text style={styles.actionText}>Add</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handleBulkFavorite()}>
-                            <Heart size={24} color="red" fill="red" />
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleBulkFavorite}>
+                            <Heart size={24} color="#444" />
+                            <Text style={styles.actionText}>Favorite</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={handleBulkDownload}>
-                            <Download size={24} color="#007AFF" />
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleBulkDownload}>
+                            <Download size={24} color="#444" />
+                            <Text style={styles.actionText}>Save</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setSelectionMode(false)}>
-                            <X size={24} />
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleBulkTrash}>
+                            <Trash2 size={24} color="#444" />
+                            <Text style={styles.actionText}>Delete</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
-            )}
+            </Animated.View>
 
             <MediaViewer
                 visible={viewerVisible}
@@ -423,6 +459,7 @@ const GalleryScreen = () => {
                 onMediaUpdated={(updated) => setMedia(prev => prev.map(m => m.id === updated.id ? updated : m))}
                 onMediaDeleted={(deletedId) => setMedia(prev => prev.filter(m => m.id !== deletedId))}
             />
+            
             <UploadPreviewModal
                 visible={previewVisible}
                 assets={selectedAssets}
@@ -431,7 +468,17 @@ const GalleryScreen = () => {
                     onRefresh();
                 }}
             />
-        </SafeAreaView>
+
+            <SelectAlbumModal
+                visible={selectAlbumVisible}
+                mediaId={Array.from(selectedIds)[0]}
+                onClose={() => {
+                    setSelectAlbumVisible(false);
+                    setSelectionMode(false);
+                    setSelectedIds(new Set());
+                }}
+            />
+        </View>
     );
 };
 
@@ -440,41 +487,88 @@ export default GalleryScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
-    heading: { fontSize: 22, fontWeight: '800', color: '#111', letterSpacing: -0.5 },
-    filters: { paddingHorizontal: 16, paddingBottom: 8 },
-    searchInput: { backgroundColor: '#f0f0f0', borderRadius: 8, padding: 10, fontSize: 16, marginBottom: 8 },
-    filterChips: { flexDirection: 'row', gap: 8 },
-    chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-    chipActive: { backgroundColor: '#007AFF' },
-    chipText: { fontSize: 14, color: '#333' },
-    chipTextActive: { color: '#fff', fontWeight: 'bold' },
+    
+    searchContainer: {
+        paddingHorizontal: 16,
+        paddingBottom: 8,
+        backgroundColor: '#fff',
+    },
+    searchPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f3f4', // Google standard search background
+        borderRadius: 24,
+        paddingHorizontal: 16,
+        height: 48,
+    },
+    searchIcon: {
+        marginRight: 12,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 16,
+        color: '#222',
+        paddingVertical: 0, // important for Android
+    },
+    profileAvatar: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#1a73e8', // Google Blue
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 12,
+    },
+    profileInitial: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
 
-    dateHeaderContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12 },
-    dateHeaderText: { fontSize: 18, fontWeight: 'bold', color: '#111' },
+    dateHeaderContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14 },
+    dateHeaderText: { fontSize: 16, fontWeight: '600', color: '#3c4043' },
     dateGroupSelectBtn: { padding: 4 },
-    dateGroupCheckBadge: { width: 20, height: 20, borderRadius: 12, borderWidth: 1, borderColor: '#ccc', justifyContent: 'center', alignItems: 'center' },
-    dateGroupCheckBadgeActive: { backgroundColor: '#007AFF', borderColor: '#007AFF', borderWidth: 0 },
+    dateGroupCheckBadge: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: '#dadce0', justifyContent: 'center', alignItems: 'center' },
+    dateGroupCheckBadgeActive: { backgroundColor: '#1a73e8', borderColor: '#1a73e8', borderWidth: 0 },
 
     row: { flexDirection: 'row', width: '100%' },
-    cell: { position: 'relative', width: CELL, height: CELL, margin: 0.5, backgroundColor: '#eee', overflow: 'hidden' },
+    cell: { width: CELL, height: CELL, margin: 0.5, overflow: 'hidden' },
+    cellImageContainer: { flex: 1, backgroundColor: '#eee', overflow: 'hidden' },
     cellImage: { width: '100%', height: '100%' },
-    noThumb: { flex: 1, backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-    noThumbIcon: { fontSize: 24 }, // Keeping just in case
-    favoriteBadge: { position: 'absolute', bottom: 4, right: 4, padding: 2 },
-    heartIcon: { fontSize: 12 }, // Keeping just in case
+    noThumb: { flex: 1, backgroundColor: '#f1f3f4', justifyContent: 'center', alignItems: 'center' },
+    
+    favoriteBadge: { 
+        position: 'absolute', 
+        top: 6, 
+        left: 6, 
+        padding: 4,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        borderRadius: 12,
+    },
 
-    selectionOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 4 },
-    processingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    checkBadge: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-end', borderWidth: 2, borderColor: '#fff' },
+    selectionOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 6 },
+    processingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+    checkBadge: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#1a73e8', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-start', borderWidth: 1.5, borderColor: '#fff' },
 
     footerSpinner: { paddingVertical: 24 },
-    retrySmallText: { color: '#fff', fontSize: 12, fontWeight: '600' },
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#222', marginBottom: 8 },
-    emptySubtitle: { fontSize: 15, color: '#666', textAlign: 'center' },
-    fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2196F3', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
-    fabText: { color: '#fff', fontSize: 22, fontWeight: '400', marginTop: -2 },
+    emptyTitle: { fontSize: 18, fontWeight: '500', color: '#3c4043', marginBottom: 8 },
+    
+    fab: { 
+        position: 'absolute', 
+        right: 20, 
+        width: 56, 
+        height: 56, 
+        borderRadius: 16, 
+        backgroundColor: '#1a73e8', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        elevation: 6, 
+        shadowColor: '#000', 
+        shadowOffset: { width: 0, height: 3 }, 
+        shadowOpacity: 0.25, 
+        shadowRadius: 5 
+    },
 
     bottomBar: {
         position: 'absolute',
@@ -482,18 +576,45 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         backgroundColor: '#fff',
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        elevation: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+    },
+    bottomBarContent: {
+        paddingTop: 16,
+        paddingHorizontal: 16,
+    },
+    selectionTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-        borderTopWidth: 1,
-        borderTopColor: '#eee',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 5
+        marginBottom: 20,
     },
-    selectionCount: { fontSize: 16, fontWeight: '600', color: '#333' },
-    bottomBarActions: { flexDirection: 'row', gap: 24 },
+    closeSelectBtn: {
+        marginRight: 16,
+    },
+    selectionCount: { 
+        fontSize: 18, 
+        fontWeight: '500', 
+        color: '#222' 
+    },
+    bottomBarActions: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between',
+        paddingHorizontal: 10,
+        paddingBottom: 8,
+    },
+    actionBtn: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    actionText: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: '#444',
+        marginTop: 6,
+    }
 });
