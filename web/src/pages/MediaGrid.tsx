@@ -44,6 +44,7 @@ const MediaGrid = () => {
   };
 
   const handleDelete = async (id: number) => {
+    if (!window.confirm("Are you sure you want to move this item to trash?")) return;
     try {
       await apiClient.post(`/media/${id}/trash/`);
       setMedia(media.filter(m => m.id !== id));
