@@ -467,6 +467,38 @@ class MediaViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
 
         return Response(serializer.data)
+        
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request):
+        from django.db.models import Sum
+        queryset = Media.objects.filter(user=request.user, is_deleted=False)
+        total_items = queryset.count()
+        total_size = queryset.aggregate(total_size=Sum("file_size"))["total_size"] or 0
+        
+        return Response({
+            "total_items": total_items,
+            "total_size": total_size
+        })
+
+    @action(detail=True, methods=["post"], url_path="share")
+    def create_share_link(self, request, pk=None):
+        media = self.get_object()
+        from .models import SharedLink
+        import datetime
+        from django.utils import timezone
+        
+        # Check if a non-expired link already exists
+        existing = SharedLink.objects.filter(media=media).first()
+        if existing:
+            return Response({"url": request.build_absolute_uri(f"/share/{existing.id}/")})
+            
+        link = SharedLink.objects.create(media=media)
+        # We can add an expiry later if needed, e.g. 7 days
+        # link.expires_at = timezone.now() + datetime.timedelta(days=7)
+        # link.save()
+        
+        url = request.build_absolute_uri(f"/share/{link.id}/")
+        return Response({"url": url})
 
     @action(detail=True, methods=["delete"], url_path="permanent-delete")
     def permanent_delete(self, request, pk=None):
@@ -518,3 +550,66 @@ class MediaViewSet(viewsets.ModelViewSet):
             is_favorite=is_favorite
         )
         return Response({"message": f"{len(media_ids)} items favorite status updated."})
+def shared_link_view(request, link_id):
+    from django.shortcuts import get_object_or_404
+    from django.http import HttpResponse
+    from .models import SharedLink
+    
+    link = get_object_or_404(SharedLink, id=link_id)
+    media = link.media
+    
+    # We need to construct the actual content URL using the DRF endpoint
+    content_url = request.build_absolute_uri(f"/api/media/{media.id}/content/")
+    
+    if media.media_type == "image":
+        media_html = f'<img src="{content_url}" alt="{media.filename}" style="max-width:100%; max-height:80vh; border-radius:8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">'
+        og_type = "image"
+    else:
+        media_html = f'<video controls src="{content_url}" style="max-width:100%; max-height:80vh; border-radius:8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);"></video>'
+        og_type = "video.other"
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Shared Media - Own Gallery</title>
+        <meta property="og:title" content="Shared from Own Gallery">
+        <meta property="og:type" content="{og_type}">
+        <meta property="og:url" content="{request.build_absolute_uri()}">
+        <meta property="og:image" content="{content_url}">
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                background-color: #f0f2f5;
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+            }}
+            .container {{
+                text-align: center;
+                padding: 20px;
+                max-width: 800px;
+            }}
+            .footer {{
+                margin-top: 20px;
+                color: #65676b;
+                font-size: 14px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            {media_html}
+            <div class="footer">
+                Shared securely via Own Gallery
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HttpResponse(html)

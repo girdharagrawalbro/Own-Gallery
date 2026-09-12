@@ -20,7 +20,7 @@ class TelegramStorageService:
 
         return message
 
-    async def upload_media(self, file):
+    async def upload_media(self, file, thumbnail=None):
 
         if file.content_type.startswith("image/"):
 
@@ -33,24 +33,32 @@ class TelegramStorageService:
             )
 
             telegram_file = message.photo[-1]
-            thumbnail_file = message.photo[0]
+            # Use index 1 (usually ~320px) for a decent quality thumbnail, instead of 0 (~90px)
+            thumbnail_file = message.photo[1] if len(message.photo) > 1 else message.photo[0]
 
             width = telegram_file.width
             height = telegram_file.height
             duration = None
 
         elif file.content_type.startswith("video/"):
+            
+            kwargs = {
+                "chat_id": self.channel_id,
+                "video": file,
+                "write_timeout": 300,
+                "read_timeout": 300,
+                "connect_timeout": 60,
+            }
+            if thumbnail:
+                kwargs["thumbnail"] = thumbnail
 
-            message = await self.bot.send_video(
-                chat_id=self.channel_id,
-                video=file,
-                write_timeout=300,
-                read_timeout=300,
-                connect_timeout=60,
-            )
+            message = await self.bot.send_video(**kwargs)
 
             telegram_file = message.video
-            thumbnail_file = None
+            # Telegram automatically generates a thumbnail for videos
+            thumbnail_file = getattr(message.video, 'thumbnail', None)
+            if not thumbnail_file:
+                thumbnail_file = getattr(message.video, 'thumb', None)
 
             width = telegram_file.width
             height = telegram_file.height

@@ -8,17 +8,23 @@ from django.utils.timezone import make_aware, is_aware
 def extract_image_taken_at(uploaded_file):
     try:
         img = Image.open(uploaded_file)
+        
+        # Try modern getexif() first
         exif = img.getexif()
+        if not exif and hasattr(img, '_getexif'):
+            exif = img._getexif()
+            
         if exif:
-            # 36867 is DateTimeOriginal
-            dt_str = exif.get(36867) 
+            # 36867 is DateTimeOriginal, 306 is DateTime, 36868 is DateTimeDigitized
+            dt_str = exif.get(36867) or exif.get(306) or exif.get(36868)
+            
             if dt_str:
                 # Format is typically "2023:10:04 12:34:56"
-                dt = datetime.strptime(dt_str, "%Y:%m:%d %H:%M:%S")
-                # Handle offset if present 36881 (OffsetTimeOriginal) e.g., "+05:30"
-                offset = exif.get(36881)
-                # For simplicity, we just make it aware in current timezone
-                return make_aware(dt) if not is_aware(dt) else dt
+                try:
+                    dt = datetime.strptime(str(dt_str), "%Y:%m:%d %H:%M:%S")
+                    return make_aware(dt) if not is_aware(dt) else dt
+                except ValueError:
+                    pass
     except Exception as e:
         print("Pillow error parsing EXIF:", e)
     finally:

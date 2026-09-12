@@ -65,6 +65,7 @@ const LoginScreen = () => {
                     onChangeText={setUsername}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    placeholderTextColor="#888"
                 />
 
                 <TextInput
@@ -73,6 +74,7 @@ const LoginScreen = () => {
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
+                    placeholderTextColor="#888"
                 />
 
                 <TouchableOpacity

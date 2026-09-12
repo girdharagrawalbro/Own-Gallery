@@ -120,14 +120,6 @@ const GalleryScreen = () => {
         return () => clearTimeout(timeout);
     }, [searchQuery, mediaFilter]);
 
-    useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            // refresh data when tab is focused, but keep page 1 to be safe
-            fetchMedia(1, 'refreshing');
-        });
-        return unsubscribe;
-    }, [navigation, searchQuery, mediaFilter]);
-
     const onRefresh = useCallback(() => {
         fetchMedia(1, 'refreshing');
     }, [searchQuery, mediaFilter]);
@@ -269,13 +261,13 @@ const GalleryScreen = () => {
                             )}
 
                             {mediaItem.status === 'processing' && (
-                                <View style={[styles.selectionOverlay, { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }]}>
+                                <View style={styles.processingOverlay}>
                                     <ActivityIndicator size="small" color="#fff" />
                                 </View>
                             )}
 
                             {selectionMode && (
-                                <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlayActive]}>
+                                <View style={styles.selectionOverlay}>
                                     {isSelected && (
                                         <View style={styles.checkBadge}>
                                             <Check size={14} color="#fff" strokeWidth={3} />
@@ -472,9 +464,9 @@ const styles = StyleSheet.create({
     favoriteBadge: { position: 'absolute', bottom: 4, right: 4, padding: 2 },
     heartIcon: { fontSize: 12 }, // Keeping just in case
 
-    selectionOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.4)', borderWidth: 1, borderColor: '#ccc' },
-    selectionOverlayActive: { backgroundColor: 'rgba(255, 255, 255, 0.4)', borderWidth: 2, borderColor: '#007AFF' },
-    checkBadge: { position: 'absolute', bottom: 8, right: 8, width: 20, height: 20, borderRadius: 12, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center' },
+    selectionOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 4 },
+    processingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    checkBadge: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-end', borderWidth: 2, borderColor: '#fff' },
 
     footerSpinner: { paddingVertical: 24 },
     retrySmallText: { color: '#fff', fontSize: 12, fontWeight: '600' },

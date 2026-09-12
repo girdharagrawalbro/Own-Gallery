@@ -32,36 +32,47 @@ export const toggleFavorite = async (id: number, isFavorite: boolean): Promise<M
   });
   return response.data;
 };
+
 export const uploadMedia = async (
-  fileUri: string,
+  uri: string,
   fileName: string,
   fileType: string,
-  onProgress?: (progressEvent: any) => void,
-  timestamp?: string,
-) => {
+  onUploadProgress: (progressEvent: any) => void,
+  timestamp?: string
+): Promise<Media> => {
   const formData = new FormData();
   formData.append('file', {
-    uri: fileUri,
+    uri,
     name: fileName,
     type: fileType,
   } as any);
 
-  if (timestamp) {
+  if (timestamp && timestamp !== 'undefined' && timestamp !== 'null') {
     formData.append('client_timestamp', timestamp);
   }
 
-  const response = await api.post('/media/', formData, {
+  const response = await api.post<Media>('/media/', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
-    onUploadProgress: onProgress,
+    onUploadProgress,
   });
 
   return response.data;
 };
 
+export const createShareLink = async (id: number): Promise<string> => {
+  const response = await api.post<{url: string}>(`/media/${id}/share/`);
+  return response.data.url;
+};
+
 export const getMediaStatus = async (id: number): Promise<Media> => {
   const response = await api.get<Media>(`/media/${id}/`);
+  return response.data;
+};
+
+export const getStats = async (): Promise<{total_items: number, total_size: number}> => {
+  const response = await api.get('/media/stats/');
   return response.data;
 };
 

@@ -68,3 +68,14 @@ class Media(models.Model):
 
     def __str__(self):
         return self.filename
+
+import uuid
+
+class SharedLink(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    media = models.ForeignKey(Media, on_delete=models.CASCADE, related_name="shared_links")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return str(self.id)

@@ -52,11 +52,8 @@ const FavoritesScreen = () => {
     };
 
     useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            fetchFavorites(1, true);
-        });
-        return unsubscribe;
-    }, [navigation]);
+        fetchFavorites(1, true);
+    }, []);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);

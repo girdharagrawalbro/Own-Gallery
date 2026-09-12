@@ -43,11 +43,8 @@ const TrashScreen = () => {
     };
 
     useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            fetchTrash();
-        });
-        return unsubscribe;
-    }, [navigation]);
+        fetchTrash();
+    }, []);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -174,7 +171,7 @@ const TrashScreen = () => {
                     <View style={styles.emptyState}>
                         <Trash2 size={64} color="#ccc" style={{ marginBottom: 16 }} />
                         <Text style={styles.emptyTitle}>Trash is empty</Text>
-                        ``                    </View>
+                    </View>
                 }
                 getItemLayout={(_, index) => ({
                     length: CELL,

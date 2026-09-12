@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Pressable, SafeAreaView } from 'react-native';
 import { useUploads } from '../context/UploadContext';
 import UploadStatusModal from '../screens/Gallery/UploadStatusModal';
 
@@ -25,10 +25,12 @@ const UploadBanner = () => {
 
     return (
         <>
-            <Pressable style={styles.container} onPress={() => setModalVisible(true)}>
-                <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.text}>{bannerText}</Text>
-            </Pressable>
+            <SafeAreaView style={styles.safeArea}>
+                <Pressable style={styles.container} onPress={() => setModalVisible(true)}>
+                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.text}>{bannerText}</Text>
+                </Pressable>
+            </SafeAreaView>
             
             <UploadStatusModal 
                 visible={modalVisible} 
@@ -39,6 +41,9 @@ const UploadBanner = () => {
 };
 
 const styles = StyleSheet.create({
+    safeArea: {
+        backgroundColor: '#007AFF',
+    },
     container: {
         backgroundColor: '#007AFF',
         padding: 10,

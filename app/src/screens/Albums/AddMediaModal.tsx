@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     dateHeaderText: { fontSize: 16, fontWeight: 'bold', color: '#111' },
     dateGroupSelectBtn: { padding: 4 },
     dateGroupCheckBadge: { width: 20, height: 20, borderRadius: 11, borderWidth: 1, borderColor: '#ccc', justifyContent: 'center', alignItems: 'center' },
-    dateGroupCheckBadgeActive: { backgroundColor: '#007AFF', borderColor: '#007AFF', borderWidth: 0 },
+    dateGroupCheckBadgeActive: { backgroundColor: '#007AFF', borderWidth: 0 },
     row: { flexDirection: 'row', width: '100%' },
     cell: { position: 'relative', width: CELL, height: CELL, margin: 0.5, backgroundColor: '#eee' },
     cellImage: { width: '100%', height: '100%' },

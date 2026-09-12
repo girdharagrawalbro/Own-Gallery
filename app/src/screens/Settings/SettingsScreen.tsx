@@ -17,6 +17,7 @@ import {
 import RNFS from 'react-native-fs';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile, changePassword } from '../../api/auth';
+import { getStats } from '../../api/media';
 import { ChevronRight, LogOut, User, Lock, Edit3 } from 'lucide-react-native';
 
 const SettingsScreen = () => {
@@ -36,9 +37,61 @@ const SettingsScreen = () => {
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system');
 
+  const [stats, setStats] = useState<{ total_items: number, total_size: number } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
+  const [wifiOnly, setWifiOnly] = useState(true);
+
   React.useEffect(() => {
     calculateCacheSize();
+    fetchStats();
+    checkAutoBackup();
   }, []);
+
+  const checkAutoBackup = async () => {
+    const BackgroundActions = require('react-native-background-actions').default;
+    setAutoBackupEnabled(BackgroundActions.isRunning());
+    
+    const wifiOnlyStr = await AsyncStorage.getItem('@backup_wifi_only');
+    setWifiOnly(wifiOnlyStr !== 'false'); // Default to true if not set
+  };
+
+  const toggleAutoBackup = async (val: boolean) => {
+    const { startAutoBackup, stopAutoBackup } = require('../../services/AutoBackupService');
+    setAutoBackupEnabled(val);
+    if (val) {
+      await startAutoBackup();
+      ToastAndroid.show("Auto-Backup Started", ToastAndroid.SHORT);
+    } else {
+      await stopAutoBackup();
+      ToastAndroid.show("Auto-Backup Stopped", ToastAndroid.SHORT);
+    }
+  };
+
+  const toggleWifiOnly = async (val: boolean) => {
+    setWifiOnly(val);
+    await AsyncStorage.setItem('@backup_wifi_only', val.toString());
+  };
+
+  const fetchStats = async () => {
+    try {
+      const data = await getStats();
+      setStats(data);
+    } catch (err) {
+      console.log('Failed to fetch stats', err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   const calculateCacheSize = async () => {
     try {
@@ -209,6 +262,52 @@ const SettingsScreen = () => {
                   <Text style={{ color: '#FF3B30' }}>Clear Cache</Text>
                 )}
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>AUTO BACKUP</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View>
+                <Text style={styles.rowText}>Auto-sync Camera Roll</Text>
+                <Text style={styles.subText}>Uploads photos in background</Text>
+              </View>
+              <Switch
+                value={autoBackupEnabled}
+                onValueChange={toggleAutoBackup}
+                trackColor={{ false: '#767577', true: '#34C759' }}
+              />
+            </View>
+            <View style={[styles.row, styles.noBorder]}>
+              <View>
+                <Text style={styles.rowText}>Wi-Fi Only</Text>
+                <Text style={styles.subText}>Save cellular data</Text>
+              </View>
+              <Switch
+                value={wifiOnly}
+                onValueChange={toggleWifiOnly}
+                trackColor={{ false: '#767577', true: '#34C759' }}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>CLOUD STORAGE</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View>
+                <Text style={styles.rowText}>Total Media</Text>
+                <Text style={styles.subText}>{loadingStats ? 'Loading...' : `${stats?.total_items || 0} Items`}</Text>
+              </View>
+            </View>
+            <View style={[styles.row, styles.noBorder]}>
+              <View>
+                <Text style={styles.rowText}>Space Used</Text>
+                <Text style={styles.subText}>{loadingStats ? 'Loading...' : formatBytes(stats?.total_size || 0)}</Text>
+              </View>
             </View>
           </View>
         </View>

@@ -50,13 +50,6 @@ const AlbumsScreen = () => {
     };
 
     useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            fetchAlbumsList();
-        });
-        return unsubscribe;
-    }, [navigation, searchQuery]);
-
-    useEffect(() => {
         const timeout = setTimeout(() => {
             fetchAlbumsList();
         }, 300);
