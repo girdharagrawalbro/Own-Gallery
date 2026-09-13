@@ -130,7 +130,7 @@ const TrashScreen = () => {
             {item.media_type === 'video' ? (
                 <VideoThumbnail thumbnailUrl={item.thumbnail_url} duration={item.duration} />
             ) : item.thumbnail_url ? (
-                <AuthenticatedImage uri={item.thumbnail_url} style={styles.cellImage} resizeMode="cover" />
+                <AuthenticatedImage uri={item.thumbnail_url} style={styles.cellImage} resizeMode="cover" cacheOnDisk={true} />
             ) : (
                 <View style={styles.noThumb}><ImageOff size={24} color="#ccc" /></View>
             )}

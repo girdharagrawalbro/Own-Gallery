@@ -22,6 +22,7 @@ const VideoThumbnail = ({ thumbnailUrl, duration }: Props) => {
           uri={thumbnailUrl}
           style={styles.image}
           resizeMode="cover"
+          cacheOnDisk={true}
         />
       ) : (
         <View style={styles.noThumb}>

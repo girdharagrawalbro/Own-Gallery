@@ -272,21 +272,11 @@ class MediaViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_502_BAD_GATEWAY,
                 )
 
-        if media.media_type == "image":
-            # Cache the image
-            image_bytes = b"".join([chunk for chunk in generator()])
-            from django.core.cache import caches
-            from django.http import HttpResponse
-            file_cache = caches["file_cache"]
-            cache_key = f"media:{media.id}:content:{media.updated_at.timestamp()}"
-            file_cache.set(cache_key, image_bytes, timeout=60*60*24*30)
-            
-            response = HttpResponse(image_bytes, content_type=content_type)
-        else:
-            # Stream videos
-            response = StreamingHttpResponse(generator(), content_type=content_type)
-            if file_size:
-                response["Content-Length"] = str(file_size)
+        # Stream both images and videos directly from Telegram
+        # This prevents the server from holding large files in memory and improves Time-To-First-Byte
+        response = StreamingHttpResponse(generator(), content_type=content_type)
+        if file_size:
+            response["Content-Length"] = str(file_size)
 
         safe_filename = urllib.parse.quote(media.filename.encode("utf-8"))
         response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"

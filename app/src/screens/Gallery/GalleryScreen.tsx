@@ -262,7 +262,7 @@ const GalleryScreen = () => {
                                 {mediaItem.media_type === 'video' ? (
                                     <VideoThumbnail thumbnailUrl={mediaItem.thumbnail_url} duration={mediaItem.duration} />
                                 ) : mediaItem.thumbnail_url ? (
-                                    <AuthenticatedImage uri={mediaItem.thumbnail_url} style={styles.cellImage} resizeMode="cover" />
+                                    <AuthenticatedImage uri={mediaItem.thumbnail_url} style={styles.cellImage} resizeMode="cover" cacheOnDisk={true} />
                                 ) : (
                                     <View style={styles.noThumb}><ImageOff size={24} color="#ccc" /></View>
                                 )}

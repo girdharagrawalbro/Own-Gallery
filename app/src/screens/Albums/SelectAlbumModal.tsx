@@ -72,7 +72,7 @@ const SelectAlbumModal = ({ visible, mediaId, onClose }: Props) => {
         >
             <View style={styles.coverContainer}>
                 {item.cover_url ? (
-                    <AuthenticatedImage uri={item.cover_url} style={styles.coverImage} resizeMode="cover" />
+                    <AuthenticatedImage uri={item.cover_url} style={styles.coverImage} resizeMode="cover" cacheOnDisk={true} />
                 ) : (
                     <View style={styles.placeholderCover}>
                         <Folder size={40} color="#ccc" />

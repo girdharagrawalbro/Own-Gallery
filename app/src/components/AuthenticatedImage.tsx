@@ -8,15 +8,16 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import RNFS from 'react-native-fs';
 import { ImageOff } from 'lucide-react-native';
 import { getAccessToken } from '../storage/authStorage';
+import { ImageCacheManager } from '../utils/ImageCacheManager';
 
 interface Props {
   uri: string;
   style?: StyleProp<ImageStyle>;
   containerStyle?: StyleProp<ViewStyle>;
   resizeMode?: 'cover' | 'contain' | 'stretch' | 'repeat' | 'center';
+  cacheOnDisk?: boolean;
 }
 
 const AuthenticatedImage = ({
@@ -24,18 +25,30 @@ const AuthenticatedImage = ({
   style,
   containerStyle,
   resizeMode = 'cover',
+  cacheOnDisk = false,
 }: Props) => {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [localUri, setLocalUri] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     
-    const loadToken = async () => {
+    const loadTokenAndImage = async () => {
       try {
         const accessToken = await getAccessToken();
         if (isMounted && accessToken) {
           setToken(accessToken);
+          
+          if (cacheOnDisk && uri) {
+            try {
+              const cachedUri = await ImageCacheManager.getCachedImage(uri, accessToken);
+              if (isMounted) setLocalUri(cachedUri);
+            } catch (cacheErr) {
+              // Fallback to network rendering if caching fails
+              console.warn('Caching failed, falling back to network stream', cacheErr);
+            }
+          }
         }
       } catch (err) {
         if (isMounted) setError(true);
@@ -43,7 +56,7 @@ const AuthenticatedImage = ({
     };
 
     if (uri) {
-      loadToken();
+      loadTokenAndImage();
     } else {
       setError(true);
     }
@@ -51,7 +64,7 @@ const AuthenticatedImage = ({
     return () => {
       isMounted = false;
     };
-  }, [uri]);
+  }, [uri, cacheOnDisk]);
 
   if (!token && !error) {
     return (
@@ -69,15 +82,14 @@ const AuthenticatedImage = ({
     );
   }
 
+  const imageSource = localUri 
+    ? { uri: localUri } 
+    : { uri: uri, headers: { Authorization: `Bearer ${token}` } };
+
   return (
     <View style={[styles.container, containerStyle]}>
       <Image
-        source={{
-          uri: uri,
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }}
+        source={imageSource}
         style={style}
         resizeMode={resizeMode}
         onError={() => setError(true)}
