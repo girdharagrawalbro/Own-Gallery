@@ -236,6 +236,8 @@ class MediaViewSet(viewsets.ModelViewSet):
                 response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
                 return response
 
+        range_header = request.META.get("HTTP_RANGE", None)
+
         if not media.telegram_file_id:
             if media.temp_file_path:
                 from telegram_storage.blob_storage import BlobStorageService
@@ -263,7 +265,7 @@ class MediaViewSet(viewsets.ModelViewSet):
             telegram_service = TelegramStorageService()
             try:
                 generator, file_size = asyncio.run(
-                    telegram_service.get_file_stream_generator(media.telegram_file_id)
+                    telegram_service.get_file_stream_generator(media.telegram_file_id, range_header=range_header)
                 )
             except Exception as e:
                 print("Telegram download error:", repr(e))
@@ -272,11 +274,22 @@ class MediaViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_502_BAD_GATEWAY,
                 )
 
-        # Stream both images and videos directly from Telegram
-        # This prevents the server from holding large files in memory and improves Time-To-First-Byte
         response = StreamingHttpResponse(generator(), content_type=content_type)
-        if file_size:
-            response["Content-Length"] = str(file_size)
+        
+        if range_header and file_size:
+            range_match = range_header.strip().split("=")[-1].split("-")
+            start = int(range_match[0]) if range_match[0] else 0
+            end = int(range_match[1]) if len(range_match) > 1 and range_match[1] else file_size - 1
+            
+            response.status_code = 206
+            response["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            response["Accept-Ranges"] = "bytes"
+            response["Content-Length"] = str(end - start + 1)
+        else:
+            response.status_code = 200
+            if file_size:
+                response["Content-Length"] = str(file_size)
+            response["Accept-Ranges"] = "bytes"
 
         safe_filename = urllib.parse.quote(media.filename.encode("utf-8"))
         response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
@@ -293,6 +306,8 @@ class MediaViewSet(viewsets.ModelViewSet):
                 {"error": "Media not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
+        range_header = request.META.get("HTTP_RANGE", None)
+
         if not media.telegram_file_id:
             if media.temp_file_path:
                 from telegram_storage.blob_storage import BlobStorageService
@@ -320,7 +335,7 @@ class MediaViewSet(viewsets.ModelViewSet):
             telegram_service = TelegramStorageService()
             try:
                 generator, file_size = asyncio.run(
-                    telegram_service.get_file_stream_generator(media.telegram_file_id)
+                    telegram_service.get_file_stream_generator(media.telegram_file_id, range_header=range_header)
                 )
             except Exception as e:
                 print("Telegram download error:", repr(e))
@@ -335,12 +350,24 @@ class MediaViewSet(viewsets.ModelViewSet):
             content_type = content_type or "application/octet-stream"
 
         response = StreamingHttpResponse(generator(), content_type=content_type)
+        
+        if range_header and file_size:
+            range_match = range_header.strip().split("=")[-1].split("-")
+            start = int(range_match[0]) if range_match[0] else 0
+            end = int(range_match[1]) if len(range_match) > 1 and range_match[1] else file_size - 1
+            
+            response.status_code = 206
+            response["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            response["Accept-Ranges"] = "bytes"
+            response["Content-Length"] = str(end - start + 1)
+        else:
+            response.status_code = 200
+            if file_size:
+                response["Content-Length"] = str(file_size)
+            response["Accept-Ranges"] = "bytes"
 
         safe_filename = urllib.parse.quote(media.filename.encode("utf-8"))
-        response["Content-Disposition"] = f"inline; filename*=utf-8''{safe_filename}"
-        
-        if file_size:
-            response["Content-Length"] = str(file_size)
+        response["Content-Disposition"] = f"attachment; filename*=utf-8''{safe_filename}"
 
         return response
 

@@ -21,51 +21,22 @@ class TelegramStorageService:
         return message
 
     async def upload_media(self, file, thumbnail=None):
+        kwargs = {
+            "chat_id": self.channel_id,
+            "document": file,
+            "write_timeout": 300,
+            "read_timeout": 300,
+            "connect_timeout": 60,
+        }
+        if thumbnail:
+            kwargs["thumbnail"] = thumbnail
 
-        if file.content_type.startswith("image/"):
+        message = await self.bot.send_document(**kwargs)
 
-            message = await self.bot.send_photo(
-                chat_id=self.channel_id,
-                photo=file,
-                write_timeout=120,
-                read_timeout=120,
-                connect_timeout=60,
-            )
-
-            telegram_file = message.photo[-1]
-            # Use index 1 (usually ~320px) for a decent quality thumbnail, instead of 0 (~90px)
-            thumbnail_file = message.photo[1] if len(message.photo) > 1 else message.photo[0]
-
-            width = telegram_file.width
-            height = telegram_file.height
-            duration = None
-
-        elif file.content_type.startswith("video/"):
-            
-            kwargs = {
-                "chat_id": self.channel_id,
-                "video": file,
-                "write_timeout": 300,
-                "read_timeout": 300,
-                "connect_timeout": 60,
-            }
-            if thumbnail:
-                kwargs["thumbnail"] = thumbnail
-
-            message = await self.bot.send_video(**kwargs)
-
-            telegram_file = message.video
-            # Telegram automatically generates a thumbnail for videos
-            thumbnail_file = getattr(message.video, 'thumbnail', None)
-            if not thumbnail_file:
-                thumbnail_file = getattr(message.video, 'thumb', None)
-
-            width = telegram_file.width
-            height = telegram_file.height
-            duration = telegram_file.duration
-
-        else:
-            raise ValueError("Unsupported media type")
+        telegram_file = message.document
+        thumbnail_file = getattr(telegram_file, 'thumbnail', None)
+        if not thumbnail_file:
+            thumbnail_file = getattr(telegram_file, 'thumb', None)
 
         return {
             "message_id": message.message_id,
@@ -76,22 +47,24 @@ class TelegramStorageService:
                 if thumbnail_file
                 else None
             ),
-            "width": width,
-            "height": height,
-            "duration": duration,
-
         }
 
-    async def get_file_stream_generator(self, file_id, chunk_size=512 * 1024):
+    async def get_file_stream_generator(self, file_id, chunk_size=512 * 1024, range_header=None):
         import httpx
         telegram_file = await self.bot.get_file(file_id)
         url = telegram_file.file_path
         file_size = telegram_file.file_size
 
+        headers = {}
+        if range_header:
+            headers["Range"] = range_header
+
         def chunk_generator():
             with httpx.Client() as client:
-                with client.stream("GET", url) as response:
-                    response.raise_for_status()
+                with client.stream("GET", url, headers=headers) as response:
+                    # Ignore 416 Range Not Satisfiable in case browser sends bad range
+                    if response.status_code not in (200, 206):
+                        response.raise_for_status()
                     for chunk in response.iter_bytes(chunk_size=chunk_size):
                         yield chunk
 

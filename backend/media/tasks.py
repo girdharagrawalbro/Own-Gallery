@@ -97,33 +97,73 @@ def upload_media_to_telegram(self, media_id):
 
         thumbnail_obj = None
         local_thumb_path = None
-        if media.mime_type and media.mime_type.startswith("video/"):
-            try:
-                import subprocess
-                fd_thumb, local_thumb_path = tempfile.mkstemp(suffix=".jpg", prefix=f"thumb_{media.id}_")
-                os.close(fd_thumb)
-                
-                # Extract a frame at 1 second mark (or 0 if very short)
-                cmd = [
-                    "ffmpeg", "-y", "-i", local_temp_path,
-                    "-ss", "00:00:01.000", "-vframes", "1",
-                    "-vf", "scale='min(320,iw)':-1", # Resize to ~320px width for Telegram
-                    local_thumb_path
-                ]
-                result = subprocess.run(cmd, capture_output=True)
-                
-                # If extraction at 1 second fails, try at 0 seconds
-                if result.returncode != 0 or not os.path.exists(local_thumb_path) or os.path.getsize(local_thumb_path) == 0:
-                    cmd[5] = "00:00:00.000"
-                    subprocess.run(cmd, capture_output=True)
+        media_width = None
+        media_height = None
+        media_duration = None
 
-                if os.path.exists(local_thumb_path) and os.path.getsize(local_thumb_path) > 0:
-                    thumbnail_obj = open(local_thumb_path, "rb")
-                    print(f"Media {media_id}: Video thumbnail extracted successfully.")
-                else:
-                    print(f"Media {media_id}: Failed to extract video thumbnail.")
+        if media.mime_type:
+            try:
+                if media.mime_type.startswith("image/"):
+                    from PIL import Image, ImageOps
+                    with Image.open(local_temp_path) as img:
+                        img = ImageOps.exif_transpose(img)
+                        media_width, media_height = img.size
+                        
+                        img.thumbnail((320, 320))
+                        fd_thumb, local_thumb_path = tempfile.mkstemp(suffix=".jpg", prefix=f"thumb_{media.id}_")
+                        os.close(fd_thumb)
+                        img.convert("RGB").save(local_thumb_path, format="JPEG", quality=85)
+                        
+                        thumbnail_obj = open(local_thumb_path, "rb")
+                        print(f"Media {media_id}: Image thumbnail generated.")
+                        
+                elif media.mime_type.startswith("video/"):
+                    import subprocess
+                    import json
+                    
+                    # Extract dimensions and duration using ffprobe
+                    cmd_probe = [
+                        "ffprobe", "-v", "error", 
+                        "-select_streams", "v:0", 
+                        "-show_entries", "stream=width,height,duration", 
+                        "-of", "json", local_temp_path
+                    ]
+                    probe_result = subprocess.run(cmd_probe, capture_output=True, text=True)
+                    if probe_result.returncode == 0:
+                        try:
+                            probe_data = json.loads(probe_result.stdout)
+                            stream = probe_data.get("streams", [{}])[0]
+                            media_width = stream.get("width")
+                            media_height = stream.get("height")
+                            if stream.get("duration"):
+                                media_duration = float(stream.get("duration"))
+                        except Exception as e:
+                            print(f"Media {media_id}: ffprobe parsing failed: {e}")
+
+                    fd_thumb, local_thumb_path = tempfile.mkstemp(suffix=".jpg", prefix=f"thumb_{media.id}_")
+                    os.close(fd_thumb)
+                    
+                    # Extract a frame at 1 second mark (or 0 if very short)
+                    cmd = [
+                        "ffmpeg", "-y", "-i", local_temp_path,
+                        "-ss", "00:00:01.000", "-vframes", "1",
+                        "-vf", "scale='min(320,iw)':-1", # Resize to ~320px width for Telegram
+                        local_thumb_path
+                    ]
+                    result = subprocess.run(cmd, capture_output=True)
+                    
+                    # If extraction at 1 second fails, try at 0 seconds
+                    if result.returncode != 0 or not os.path.exists(local_thumb_path) or os.path.getsize(local_thumb_path) == 0:
+                        cmd[5] = "00:00:00.000"
+                        subprocess.run(cmd, capture_output=True)
+
+                    if os.path.exists(local_thumb_path) and os.path.getsize(local_thumb_path) > 0:
+                        thumbnail_obj = open(local_thumb_path, "rb")
+                        print(f"Media {media_id}: Video thumbnail extracted successfully.")
+                    else:
+                        print(f"Media {media_id}: Failed to extract video thumbnail.")
             except Exception as e:
-                print(f"Media {media_id}: Exception during video thumbnail extraction: {e}")
+                print(f"Media {media_id}: Exception during metadata/thumbnail extraction: {e}")
 
         try:
             telegram_data = asyncio.run(
@@ -144,17 +184,12 @@ def upload_media_to_telegram(self, media_id):
             "thumbnail_file_id"
         )
 
-        if telegram_data.get("metadata"):
-            meta = telegram_data["metadata"]
-
-            if meta.get("width"):
-                media.width = meta["width"]
-
-            if meta.get("height"):
-                media.height = meta["height"]
-
-            if meta.get("duration"):
-                media.duration = meta["duration"]
+        if media_width:
+            media.width = media_width
+        if media_height:
+            media.height = media_height
+        if media_duration:
+            media.duration = media_duration
 
         media.status = "completed"
         media.processed_at = timezone.now()

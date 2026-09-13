@@ -39,6 +39,21 @@ export const login = async (
     }
 };
 
+export const register = async (
+    username: string,
+    email: string,
+    password: string,
+    invite_code: string,
+): Promise<any> => {
+    const response = await api.post('/auth/register/', {
+        username,
+        email,
+        password,
+        invite_code,
+    });
+    return response.data;
+};
+
 export interface User {
     id: number;
     username: string;

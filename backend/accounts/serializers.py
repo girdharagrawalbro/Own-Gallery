@@ -10,6 +10,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         write_only=True,
         min_length=8
     )
+    invite_code = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = User
@@ -18,9 +19,20 @@ class RegisterSerializer(serializers.ModelSerializer):
             "username",
             "email",
             "password",
+            "invite_code",
         ]
 
+    def validate_invite_code(self, value):
+        import os
+        expected_code = os.getenv("INVITE_CODE")
+        if not expected_code:
+            raise serializers.ValidationError("Registration is currently disabled.")
+        if value != expected_code:
+            raise serializers.ValidationError("Invalid invite code.")
+        return value
+
     def create(self, validated_data):
+        validated_data.pop("invite_code", None)
         password = validated_data.pop("password")
 
         user = User(**validated_data)

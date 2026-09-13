@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Image as ImageIcon } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 
-const Login = () => {
+const Register = () => {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
@@ -18,7 +20,15 @@ const Login = () => {
     setError('');
 
     try {
-      // 1. Get tokens
+      // 1. Register User
+      await apiClient.post('/auth/register/', {
+        username,
+        email,
+        password,
+        invite_code: inviteCode
+      });
+
+      // 2. Automatically log in after registration
       const response = await apiClient.post('/auth/login/', { username, password });
       const accessToken = response.data.access;
 
@@ -26,17 +36,24 @@ const Login = () => {
         throw new Error('No access token received');
       }
 
-      // 2. Fetch User Profile
-      // Temporarily set token for this request
+      // 3. Fetch User Profile
       const meResponse = await apiClient.get('/auth/me/', {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
 
-      // 3. Finalize Login
+      // 4. Finalize Login
       login(accessToken, meResponse.data);
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
+      if (err.response?.data?.invite_code) {
+        setError(err.response.data.invite_code[0]);
+      } else if (err.response?.data?.username) {
+        setError('Username: ' + err.response.data.username[0]);
+      } else if (err.response?.data?.email) {
+        setError('Email: ' + err.response.data.email[0]);
+      } else {
+        setError(err.response?.data?.error || 'Registration failed. Please check your inputs.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -62,11 +79,14 @@ const Login = () => {
             padding: '16px',
             borderRadius: '50%'
           }}>
-            <ImageIcon size={48} color="#007AFF" />
+            <UserPlus size={48} color="#007AFF" />
           </div>
         </div>
 
-        <h1 style={{ marginBottom: '24px', fontSize: '24px' }}>Login to your Gallery</h1>
+        <h1 style={{ marginBottom: '8px', fontSize: '24px' }}>Create Account</h1>
+        <p style={{ marginBottom: '24px', fontSize: '14px', color: '#888' }}>
+          Join the private gallery using your invite code.
+        </p>
 
         {error && (
           <div style={{
@@ -93,11 +113,31 @@ const Login = () => {
           />
           <input
             className="input-field"
+            type="email"
+            placeholder="Email Address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoCapitalize="none"
+          />
+          <input
+            className="input-field"
             type="password"
-            placeholder="Password"
+            placeholder="Password (min 8 chars)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={8}
+          />
+          <input
+            className="input-field"
+            type="text"
+            placeholder="Secret Invite Code"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+            required
+            autoCapitalize="none"
+            style={{ borderColor: 'rgba(59, 130, 246, 0.5)' }}
           />
           <button
             type="submit"
@@ -105,14 +145,14 @@ const Login = () => {
             disabled={isLoading}
             style={{ marginTop: '8px', opacity: isLoading ? 0.7 : 1 }}
           >
-            {isLoading ? 'Logging In...' : 'Log In'}
+            {isLoading ? 'Creating Account...' : 'Register'}
           </button>
         </form>
 
         <div style={{ marginTop: '24px', fontSize: '14px', color: '#888' }}>
-          Don't have an account?{' '}
-          <a href="/register" style={{ color: '#007AFF', textDecoration: 'none', fontWeight: '500' }}>
-            Create one
+          Already have an account?{' '}
+          <a href="/login" style={{ color: '#007AFF', textDecoration: 'none', fontWeight: '500' }}>
+            Log in
           </a>
         </div>
       </div>
@@ -120,4 +160,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Register;

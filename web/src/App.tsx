@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import MediaGrid from './pages/MediaGrid';
 import TrashGrid from './pages/TrashGrid';
 import './index.css';
@@ -29,6 +30,7 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/" element={<MediaGrid />} />
         <Route path="/favorites" element={<Favorites />} />

@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, SafeAreaView } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import LoginScreen from './src/screens/Auth/LoginScreen';
+import AuthScreen from './src/screens/Auth/AuthScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { UploadProvider } from './src/context/UploadContext';
@@ -21,7 +21,7 @@ const AppContent = () => {
   }
 
   if (!isAuthenticated) {
-    return <LoginScreen />;
+    return <AuthScreen />;
   }
 
   return (
