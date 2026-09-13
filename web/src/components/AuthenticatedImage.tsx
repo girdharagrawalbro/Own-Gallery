@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ImageOff } from 'lucide-react';
 import { apiClient } from '../api/client';
 
 interface AuthenticatedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -39,8 +40,8 @@ const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, style, ...
 
   if (error) {
     return (
-      <div style={{ ...style, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.05)' }}>
-        <span style={{ color: '#aaa', fontSize: '12px' }}>Failed to load</span>
+      <div style={{ ...style, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.08) 100%)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <ImageOff size={28} color="rgba(255,255,255,0.4)" strokeWidth={1.5} />
       </div>
     );
   }

@@ -77,7 +77,7 @@ const AuthenticatedImage = ({
   if (error || !uri) {
     return (
       <View style={[styles.container, containerStyle, styles.errorContainer]}>
-        <ImageOff size={24} color="#ccc" />
+        <ImageOff size={24} color="#9AA0A6" />
       </View>
     );
   }
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   errorContainer: {
-    backgroundColor: '#ffebee',
+    backgroundColor: '#F1F3F4',
   }
 });
 
