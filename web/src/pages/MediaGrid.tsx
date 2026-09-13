@@ -1,45 +1,53 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
-import { Image as ImageIcon, Play, Heart, Trash2, Check, FolderPlus } from 'lucide-react';
+import { Heart, Trash2, Check, FolderPlus } from 'lucide-react';
 import UploadZone from '../components/UploadZone';
 import MediaViewer from '../components/MediaViewer';
-import AuthenticatedImage from '../components/AuthenticatedImage';
 import SelectAlbumModal from '../components/SelectAlbumModal';
 
-interface MediaItem {
-  id: number;
-  filename: string;
-  thumbnail_url: string;
-  content_url: string;
-  media_type: string;
-  is_favorite: boolean;
-  file_size: number;
-  width: number;
-  height: number;
-  created_at: string;
-}
+import GroupedMediaGrid from '../components/GroupedMediaGrid';
+import type { MediaItem } from '../utils/dateUtils';
 
 const MediaGrid = () => {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [showSelectAlbum, setShowSelectAlbum] = useState(false);
 
   useEffect(() => {
-    fetchMedia();
+    fetchMedia('/media/');
   }, []);
 
-  const fetchMedia = async () => {
+  const fetchMedia = async (url: string) => {
     try {
-      const response = await apiClient.get('/media/');
-      const items = response.data.results ? response.data.results : response.data;
-      setMedia(Array.isArray(items) ? items : []);
+      setLoading(true);
+      const response = await apiClient.get(url);
+      
+      const newItems = response.data.results ? response.data.results : (Array.isArray(response.data) ? response.data : []);
+      
+      if (url === '/media/') {
+        setMedia(newItems);
+      } else {
+        setMedia(prev => [...prev, ...newItems]);
+      }
+      
+      setNextUrl(response.data.next || null);
     } catch (error) {
       console.error('Failed to fetch media', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (nextUrl && !loading) {
+      // apiClient.get automatically prepends base URL if we don't handle it, 
+      // but DRF returns full URL for next. Let's just pass the path.
+      const urlObj = new URL(nextUrl);
+      fetchMedia(urlObj.pathname + urlObj.search);
     }
   };
 
@@ -124,75 +132,18 @@ const MediaGrid = () => {
         )}
       </div>
 
-      <UploadZone onUploadSuccess={fetchMedia} />
+      <UploadZone onUploadSuccess={() => fetchMedia('/media/')} />
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-          Loading your media...
-        </div>
-      ) : media.length === 0 ? (
-        <div className="glass-panel animate-fade-in" style={{ textAlign: 'center', padding: '64px 20px', background: 'var(--bg-secondary)', border: 'none' }}>
-          <ImageIcon size={48} color="var(--text-secondary)" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-          <h2 style={{ fontSize: '18px', fontWeight: '500' }}>No photos yet</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Upload some photos or videos to get started.</p>
-        </div>
-      ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: '8px'
-        }}>
-          {media.map((item, index) => (
-            <div
-              key={item.id}
-              className="glass-panel animate-fade-in"
-              style={{
-                aspectRatio: '1/1',
-                overflow: 'hidden',
-                position: 'relative',
-                animationDelay: `${index * 0.02}s`,
-                cursor: 'pointer',
-                borderRadius: '8px',
-                border: 'none',
-              }}
-              onClick={() => {
-                if (isSelectionMode) {
-                  handleToggleSelection(item.id);
-                } else {
-                  setViewerIndex(index);
-                }
-              }}
-            >
-              <AuthenticatedImage
-                src={item.thumbnail_url || item.content_url}
-                alt={item.filename}
-                style={{ 
-                  width: '100%', height: '100%', objectFit: 'cover',
-                  transform: selectedIds.includes(item.id) ? 'scale(0.85)' : 'scale(1)',
-                  transition: 'transform 0.2s',
-                  borderRadius: selectedIds.includes(item.id) ? '8px' : '0'
-                }}
-              />
-              
-              {isSelectionMode && (
-                <div style={{
-                  position: 'absolute', top: '8px', left: '8px', width: '20px', height: '20px',
-                  borderRadius: '50%', border: '2px solid white',
-                  background: selectedIds.includes(item.id) ? 'var(--accent-color)' : 'rgba(0,0,0,0.3)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10
-                }}>
-                  {selectedIds.includes(item.id) && <Check size={12} color="white" />}
-                </div>
-              )}
-              {item.media_type === 'video' && (
-                <div style={{ position: 'absolute', top: '8px', right: '8px', color: 'white', background: 'rgba(0,0,0,0.3)', borderRadius: '50%', padding: '4px' }}>
-                  <Play fill="white" size={12} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <GroupedMediaGrid
+        media={media}
+        loading={loading}
+        hasMore={!!nextUrl}
+        onLoadMore={handleLoadMore}
+        isSelectionMode={isSelectionMode}
+        selectedIds={selectedIds}
+        onToggleSelection={handleToggleSelection}
+        onItemClick={setViewerIndex}
+      />
 
       {isSelectionMode && selectedIds.length > 0 && (
         <div style={{

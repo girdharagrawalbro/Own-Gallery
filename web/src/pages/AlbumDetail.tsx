@@ -1,26 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import { ArrowLeft, Image as ImageIcon, Play, Check, Trash2, FolderMinus } from 'lucide-react';
+import { Image as ImageIcon, Check, Trash2, FolderMinus } from 'lucide-react';
 import MediaViewer from '../components/MediaViewer';
-import AuthenticatedImage from '../components/AuthenticatedImage';
 
-interface MediaItem {
-  id: number;
-  filename: string;
-  thumbnail_url: string;
-  content_url: string;
-  media_type: string;
-  is_favorite: boolean;
-  file_size: number;
-  width: number;
-  height: number;
-  created_at: string;
-}
+import GroupedMediaGrid from '../components/GroupedMediaGrid';
+import type { MediaItem } from '../utils/dateUtils';
 
 interface Album {
   id: number;
   name: string;
+  description: string;
+  created_at: string;
 }
 
 const AlbumDetail = () => {
@@ -29,24 +20,52 @@ const AlbumDetail = () => {
   const [album, setAlbum] = useState<Album | null>(null);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
+  
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
 
   useEffect(() => {
-    fetchAlbumMedia();
+    fetchAlbum();
+    fetchMedia(`/media/?album=${id}`);
   }, [id]);
 
-  const fetchAlbumMedia = async () => {
+  const fetchAlbum = async () => {
     try {
-      const response = await apiClient.get(`/albums/${id}/media/`);
-      setAlbum(response.data.album);
-      setMedia(response.data.media);
+      const response = await apiClient.get(`/albums/${id}/`);
+      setAlbum(response.data);
     } catch (error) {
-      console.error('Failed to fetch album media', error);
+      console.error('Failed to fetch album details', error);
       navigate('/albums');
+    }
+  };
+
+  const fetchMedia = async (url: string) => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get(url);
+      
+      const newItems = response.data.results ? response.data.results : (Array.isArray(response.data) ? response.data : []);
+      
+      if (url === `/media/?album=${id}`) {
+        setMedia(newItems);
+      } else {
+        setMedia(prev => [...prev, ...newItems]);
+      }
+      
+      setNextUrl(response.data.next || null);
+    } catch (error) {
+      console.error('Failed to fetch media', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (nextUrl && !loading) {
+      const urlObj = new URL(nextUrl);
+      fetchMedia(urlObj.pathname + urlObj.search);
     }
   };
 
@@ -79,16 +98,49 @@ const AlbumDetail = () => {
     }
   };
 
+  const handleToggleFavorite = async (mediaId: number) => {
+    try {
+      const current = media.find(m => m.id === mediaId);
+      if (!current) return;
+      await apiClient.post(`/media/${mediaId}/favorite/`, { is_favorite: !current.is_favorite });
+      setMedia(media.map(m => m.id === mediaId ? { ...m, is_favorite: !current.is_favorite } : m));
+    } catch (err) {
+      console.error('Failed to toggle favorite', err);
+    }
+  };
+
+  const handleDelete = async (mediaId: number) => {
+    if (!window.confirm("Are you sure you want to move this item to trash?")) return;
+    try {
+      await apiClient.post(`/media/${mediaId}/trash/`);
+      setMedia(media.filter(m => m.id !== mediaId));
+      setViewerIndex(null);
+    } catch (err) {
+      console.error('Failed to delete', err);
+    }
+  };
+
+  if (!album) {
+    return <div style={{ textAlign: 'center', padding: '40px' }}>Loading album...</div>;
+  }
+
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button className="btn-icon" onClick={() => navigate('/albums')} title="Back to Albums">
-            <ArrowLeft size={24} />
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        <div>
+          <button 
+            onClick={() => navigate('/albums')}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: '8px', padding: 0 }}
+          >
+            ← Back to Albums
           </button>
-          <h1 style={{ fontSize: '24px', fontWeight: '500' }}>{album?.name || 'Loading...'}</h1>
+          <h1 style={{ fontSize: '28px', fontWeight: '600', marginBottom: '8px' }}>{album.name}</h1>
+          {album.description && (
+            <p style={{ color: 'var(--text-secondary)' }}>{album.description}</p>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {media.length > 0 && (
             <button 
               className="btn-icon" 
@@ -104,65 +156,19 @@ const AlbumDetail = () => {
         </div>
       </header>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>Loading album...</div>
-      ) : media.length === 0 ? (
-        <div className="glass-panel animate-fade-in" style={{ textAlign: 'center', padding: '64px 20px', background: 'var(--bg-secondary)', border: 'none' }}>
-          <ImageIcon size={48} color="var(--text-secondary)" style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-          <h2 style={{ fontSize: '18px', fontWeight: '500' }}>Album is empty</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Add photos to this album from your main gallery.</p>
-        </div>
-      ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: '8px'
-        }}>
-          {media.map((item, index) => (
-            <div
-              key={item.id}
-              className="glass-panel animate-fade-in"
-              style={{
-                aspectRatio: '1/1', overflow: 'hidden', position: 'relative',
-                animationDelay: `${index * 0.02}s`, cursor: 'pointer', borderRadius: '8px', border: 'none'
-              }}
-              onClick={() => {
-                if (isSelectionMode) {
-                  handleToggleSelection(item.id);
-                } else {
-                  setViewerIndex(index);
-                }
-              }}
-            >
-              <AuthenticatedImage
-                src={item.thumbnail_url || item.content_url}
-                alt={item.filename}
-                style={{ 
-                  width: '100%', height: '100%', objectFit: 'cover',
-                  transform: selectedIds.includes(item.id) ? 'scale(0.85)' : 'scale(1)',
-                  transition: 'transform 0.2s',
-                  borderRadius: selectedIds.includes(item.id) ? '8px' : '0'
-                }}
-              />
-              {isSelectionMode && (
-                <div style={{
-                  position: 'absolute', top: '8px', left: '8px', width: '20px', height: '20px',
-                  borderRadius: '50%', border: '2px solid white',
-                  background: selectedIds.includes(item.id) ? 'var(--accent-color)' : 'rgba(0,0,0,0.3)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10
-                }}>
-                  {selectedIds.includes(item.id) && <Check size={12} color="white" />}
-                </div>
-              )}
-              {item.media_type === 'video' && (
-                <div style={{ position: 'absolute', top: '8px', right: '8px', color: 'white', background: 'rgba(0,0,0,0.3)', borderRadius: '50%', padding: '4px' }}>
-                  <Play fill="white" size={12} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <GroupedMediaGrid
+        media={media}
+        loading={loading}
+        hasMore={!!nextUrl}
+        onLoadMore={handleLoadMore}
+        isSelectionMode={isSelectionMode}
+        selectedIds={selectedIds}
+        onToggleSelection={handleToggleSelection}
+        onItemClick={setViewerIndex}
+        emptyIcon={<ImageIcon size={48} color="var(--text-secondary)" style={{ margin: '0 auto 16px', opacity: 0.5 }} />}
+        emptyTitle="Album is empty"
+        emptyDescription="Add photos to this album from your main gallery."
+      />
 
       {isSelectionMode && selectedIds.length > 0 && (
         <div style={{
@@ -176,6 +182,15 @@ const AlbumDetail = () => {
             <button onClick={handleRemoveFromAlbum} className="btn-icon" title="Remove from Album">
               <FolderMinus size={20} />
             </button>
+            <button onClick={() => {
+              for (const id of selectedIds) {
+                handleDelete(id);
+              }
+              setSelectedIds([]);
+              setIsSelectionMode(false);
+            }} className="btn-icon" title="Trash" style={{ color: 'var(--danger-color)' }}>
+              <Trash2 size={20} />
+            </button>
           </div>
         </div>
       )}
@@ -185,8 +200,8 @@ const AlbumDetail = () => {
           media={media}
           currentIndex={viewerIndex}
           onClose={() => setViewerIndex(null)}
-          onDelete={() => {}} // Deleting from album detail might require more logic or just removing from album
-          onToggleFavorite={() => {}} // We skip favorite toggling here for simplicity, or we can pass the real function
+          onDelete={handleDelete}
+          onToggleFavorite={handleToggleFavorite}
         />
       )}
     </div>
