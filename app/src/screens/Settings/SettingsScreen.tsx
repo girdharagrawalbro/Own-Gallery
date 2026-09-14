@@ -19,7 +19,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile, changePassword } from '../../api/auth';
 import { getStats } from '../../api/media';
+import { formatBytes } from '../../utils/format';
 import { ChevronRight, LogOut, User, Lock, Edit3 } from 'lucide-react-native';
+
+// Thumbnails/previews are cached natively (Fresco / RCTImageLoader) and videos/shares
+// are downloaded into the app cache directory, so walk it recursively.
+// Only files are removed; directories stay so native caches keep working.
+const walkCache = async (dir: string, onFile: (file: RNFS.ReadDirItem) => Promise<void> | void) => {
+  let entries: RNFS.ReadDirItem[] = [];
+  try {
+    entries = await RNFS.readDir(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      await walkCache(entry.path, onFile);
+    } else if (entry.isFile()) {
+      await onFile(entry);
+    }
+  }
+};
 
 const SettingsScreen = () => {
   const { user, setUser, logout } = useAuth();
@@ -34,7 +54,7 @@ const SettingsScreen = () => {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  const [cacheSize, setCacheSize] = useState('0 MB');
+  const [cacheSize, setCacheSize] = useState('…');
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system');
 
@@ -86,24 +106,13 @@ const SettingsScreen = () => {
     }
   };
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
   const calculateCacheSize = async () => {
     try {
-      const result = await RNFS.readDir(RNFS.CachesDirectoryPath);
       let totalSize = 0;
-      for (const file of result) {
-        if (file.isFile()) {
-          totalSize += file.size;
-        }
-      }
-      setCacheSize((totalSize / (1024 * 1024)).toFixed(2) + ' MB');
+      await walkCache(RNFS.CachesDirectoryPath, file => {
+        totalSize += Number(file.size) || 0;
+      });
+      setCacheSize(formatBytes(totalSize));
     } catch (e) {
       console.log('Error calculating cache size:', e);
     }
@@ -112,15 +121,12 @@ const SettingsScreen = () => {
   const clearCache = async () => {
     setIsClearingCache(true);
     try {
-      const result = await RNFS.readDir(RNFS.CachesDirectoryPath);
-      for (const file of result) {
-        if (file.isFile()) {
-          await RNFS.unlink(file.path);
-        }
-      }
-      setCacheSize('0 MB');
+      await walkCache(RNFS.CachesDirectoryPath, async file => {
+        await RNFS.unlink(file.path).catch(() => {});
+      });
+      await calculateCacheSize();
       ToastAndroid.show('Cache cleared', ToastAndroid.SHORT);
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to clear cache');
     } finally {
       setIsClearingCache(false);

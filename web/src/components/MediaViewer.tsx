@@ -1,224 +1,204 @@
-import React, { useState } from 'react';
-import { X, Info, Download, Trash2, Heart, Share2, Copy } from 'lucide-react';
-import { apiClient } from '../api/client';
-import AuthenticatedImage from './AuthenticatedImage';
-import AuthenticatedVideo from './AuthenticatedVideo';
-
-interface MediaItem {
-  id: number;
-  filename: string;
-  thumbnail_url: string;
-  content_url: string;
-  media_type: string;
-  is_favorite: boolean;
-  file_size: number;
-  width: number;
-  height: number;
-  created_at: string;
-}
+import { useEffect, useRef, useState } from 'react';
+import type { TouchEvent } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Heart, Info, Share2, Trash2 } from 'lucide-react';
+import type { Media } from '../types/media';
+import MediaInfoPanel from './MediaInfoPanel';
+import ShareLinkModal from './ShareLinkModal';
+import { ViewerImage, ViewerVideo } from './ViewerMedia';
 
 interface MediaViewerProps {
-  media: MediaItem[];
-  currentIndex: number;
+  items: Media[];
+  currentId: number;
+  onNavigate: (id: number) => void;
   onClose: () => void;
-  onDelete: (id: number) => void;
-  onToggleFavorite: (id: number) => void;
+  onToggleFavorite?: (id: number) => void;
+  /** Resolves true when the item was trashed. */
+  onTrash?: (id: number) => Promise<boolean>;
 }
 
-const MediaViewer: React.FC<MediaViewerProps> = ({ media, currentIndex, onClose, onDelete, onToggleFavorite }) => {
-  const [showInfo, setShowInfo] = useState(false);
-  const [shareLink, setShareLink] = useState<string | null>(null);
-  const currentItem = media[currentIndex];
+const SWIPE_THRESHOLD = 50;
 
-  if (!currentItem) return null;
-
-  const handleDownload = () => {
-    const link = document.createElement('a');
-    link.href = currentItem.content_url;
-    link.download = currentItem.filename;
-    link.click();
-  };
-
-  const handleShare = async () => {
+const MediaViewer = ({ items, currentId, onNavigate, onClose, onToggleFavorite, onTrash }: MediaViewerProps) => {
+  const [showInfo, setShowInfo] = useState(() => {
     try {
-      const response = await apiClient.post(`/media/${currentItem.id}/share/`);
-      setShareLink(response.data.url);
-    } catch (err) {
-      console.error('Failed to generate share link', err);
+      return window.innerWidth >= 1100 && localStorage.getItem('viewer_info') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [shareId, setShareId] = useState<number | null>(null);
+  const [zoomedId, setZoomedId] = useState<number | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  // A single findIndex per render (not inside a loop).
+  const index = items.findIndex((m) => m.id === currentId);
+  const item = index >= 0 ? items[index] : null;
+  const prev = index > 0 ? items[index - 1] : null;
+  const next = index >= 0 && index < items.length - 1 ? items[index + 1] : null;
+  const zoomed = item !== null && zoomedId === item.id;
+
+  // The item disappeared from the list (e.g. removed elsewhere): close.
+  useEffect(() => {
+    if (!item) onClose();
+  }, [item, onClose]);
+
+  // Lock page scroll while open.
+  useEffect(() => {
+    const { body } = document;
+    const previousOverflow = body.style.overflow;
+    body.style.overflow = 'hidden';
+    body.classList.add('viewer-open');
+    return () => {
+      body.style.overflow = previousOverflow;
+      body.classList.remove('viewer-open');
+    };
+  }, []);
+
+  // Preload neighbours so next/prev feel instant.
+  useEffect(() => {
+    for (const neighbour of [next, prev]) {
+      if (!neighbour) continue;
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = neighbour.preview_url;
+    }
+  }, [next, prev]);
+
+  const latest = useRef({ prev, next, zoomed, shareId, onNavigate, onClose });
+  useEffect(() => {
+    latest.current = { prev, next, zoomed, shareId, onNavigate, onClose };
+  });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const s = latest.current;
+      if (s.shareId !== null) return; // the modal handles its own keys
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (s.zoomed) setZoomedId(null);
+        else s.onClose();
+      } else if (e.key === 'ArrowRight' && s.next) {
+        e.preventDefault();
+        s.onNavigate(s.next.id);
+      } else if (e.key === 'ArrowLeft' && s.prev) {
+        e.preventDefault();
+        s.onNavigate(s.prev.id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  if (!item) return null;
+
+  const toggleInfo = () => {
+    const nextValue = !showInfo;
+    setShowInfo(nextValue);
+    try {
+      localStorage.setItem('viewer_info', nextValue ? '1' : '0');
+    } catch {
+      /* storage unavailable */
     }
   };
 
-  const copyToClipboard = () => {
-    if (shareLink) {
-      navigator.clipboard.writeText(shareLink);
-      alert('Link copied to clipboard!');
-      setShareLink(null);
-    }
+  const handleTrash = async () => {
+    if (!onTrash || !window.confirm('Move this item to trash?')) return;
+    const fallback = next ?? prev;
+    if (fallback) onNavigate(fallback.id);
+    const ok = await onTrash(item.id);
+    if (!ok && fallback) onNavigate(item.id);
+    else if (ok && !fallback) onClose();
   };
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length !== 1 || zoomed) return;
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || zoomed) return;
+    const dx = e.changedTouches[0].clientX - start.x;
+    const dy = e.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (dx < 0 && next) onNavigate(next.id);
+    else if (dx > 0 && prev) onNavigate(prev.id);
   };
 
-  return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.95)',
-      zIndex: 1000,
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      {/* Top Actions */}
-      <div style={{
-        position: 'absolute',
-        top: 20,
-        right: 20,
-        display: 'flex',
-        gap: '16px',
-        zIndex: 1010
-      }}>
-        <button className="btn-icon" onClick={handleShare} title="Share Publicly">
-          <Share2 size={24} color="white" />
-        </button>
-        <button className="btn-icon" onClick={handleDownload} title="Download">
-          <Download size={24} color="white" />
-        </button>
-        <button className="btn-icon" onClick={() => onToggleFavorite(currentItem.id)} title="Favorite">
-          <Heart size={24} color={currentItem.is_favorite ? "#FF3B30" : "white"} fill={currentItem.is_favorite ? "#FF3B30" : "transparent"} />
-        </button>
-        <button className="btn-icon" onClick={() => setShowInfo(!showInfo)} title="Info">
-          <Info size={24} color="white" />
-        </button>
-        <button className="btn-icon" onClick={() => onDelete(currentItem.id)} title="Delete">
-          <Trash2 size={24} color="white" />
-        </button>
-        <button className="btn-icon" onClick={onClose} title="Close">
-          <X size={24} color="white" />
-        </button>
-      </div>
+  return createPortal(
+    <div className="viewer" role="dialog" aria-modal="true" aria-label={item.filename}>
+      <div className="viewer-main">
+        <div className="viewer-topbar">
+          <button className="viewer-btn" onClick={onClose} title="Back" aria-label="Back">
+            <ArrowLeft size={22} />
+          </button>
+          <div className="viewer-actions">
+            <button className="viewer-btn" onClick={() => setShareId(item.id)} title="Share" aria-label="Share">
+              <Share2 size={20} />
+            </button>
+            <a className="viewer-btn" href={item.download_url} title="Download" aria-label="Download">
+              <Download size={20} />
+            </a>
+            {onToggleFavorite && (
+              <button
+                className={`viewer-btn${item.is_favorite ? ' is-active' : ''}`}
+                onClick={() => onToggleFavorite(item.id)}
+                title={item.is_favorite ? 'Remove from favorites' : 'Favorite'}
+                aria-label={item.is_favorite ? 'Remove from favorites' : 'Favorite'}
+                aria-pressed={item.is_favorite}
+              >
+                <Heart size={20} fill={item.is_favorite ? 'currentColor' : 'none'} />
+              </button>
+            )}
+            <button
+              className={`viewer-btn${showInfo ? ' is-active' : ''}`}
+              onClick={toggleInfo}
+              title="Info"
+              aria-label="Info"
+              aria-pressed={showInfo}
+            >
+              <Info size={20} />
+            </button>
+            {onTrash && (
+              <button className="viewer-btn" onClick={handleTrash} title="Move to trash" aria-label="Move to trash">
+                <Trash2 size={20} />
+              </button>
+            )}
+          </div>
+        </div>
 
-      {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px' }}>
-        {currentItem.media_type === 'image' ? (
-          <AuthenticatedImage 
-            src={currentItem.content_url} 
-            alt={currentItem.filename}
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-          />
-        ) : (
-          <AuthenticatedVideo 
-            src={currentItem.content_url} 
-            controls
-            autoPlay
-            style={{ maxWidth: '100%', maxHeight: '100%' }}
-          />
+        <div className="viewer-stage" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          {item.media_type === 'video' ? (
+            <ViewerVideo key={item.id} item={item} />
+          ) : (
+            <ViewerImage
+              key={item.id}
+              item={item}
+              zoomed={zoomed}
+              onToggleZoom={() => setZoomedId(zoomed ? null : item.id)}
+            />
+          )}
+        </div>
+
+        {prev && !zoomed && (
+          <button className="viewer-nav viewer-nav-prev" onClick={() => onNavigate(prev.id)} aria-label="Previous">
+            <ChevronLeft size={32} />
+          </button>
+        )}
+        {next && !zoomed && (
+          <button className="viewer-nav viewer-nav-next" onClick={() => onNavigate(next.id)} aria-label="Next">
+            <ChevronRight size={32} />
+          </button>
         )}
       </div>
 
-      {/* Info Panel Overlay */}
-      {showInfo && (
-        <div className="glass-panel animate-fade-in" style={{
-          position: 'absolute',
-          bottom: 20,
-          right: 20,
-          width: '300px',
-          padding: '24px',
-          color: 'white',
-          zIndex: 1010
-        }}>
-          <h3 style={{ marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '8px' }}>Details</h3>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ color: '#aaa' }}>Date Taken</span>
-            <span>{new Date(currentItem.created_at).toLocaleDateString()}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ color: '#aaa' }}>Size</span>
-            <span>{formatBytes(currentItem.file_size)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ color: '#aaa' }}>Resolution</span>
-            <span>{currentItem.width} x {currentItem.height}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#aaa' }}>Format</span>
-            <span>{currentItem.media_type}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Share Link Modal */}
-      {shareLink && (
-        <div style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          background: 'var(--glass-bg)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: '16px',
-          padding: '24px',
-          width: '90%',
-          maxWidth: '400px',
-          zIndex: 2000,
-          color: 'white',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ margin: 0 }}>Share Public Link</h3>
-            <button className="btn-icon" onClick={() => setShareLink(null)}>
-              <X size={20} color="white" />
-            </button>
-          </div>
-          <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '16px' }}>Anyone with this link can view this media.</p>
-          
-          <div style={{ 
-            display: 'flex', 
-            background: 'rgba(0,0,0,0.3)', 
-            borderRadius: '8px', 
-            border: '1px solid rgba(255,255,255,0.1)',
-            overflow: 'hidden'
-          }}>
-            <input 
-              type="text" 
-              value={shareLink} 
-              readOnly 
-              style={{ 
-                flex: 1, 
-                background: 'transparent', 
-                border: 'none', 
-                color: 'white', 
-                padding: '12px',
-                outline: 'none'
-              }} 
-            />
-            <button 
-              onClick={copyToClipboard}
-              style={{
-                background: 'var(--primary-color)',
-                border: 'none',
-                padding: '0 16px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <Copy size={18} color="white" />
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+      {showInfo && <MediaInfoPanel item={item} onClose={toggleInfo} />}
+      {shareId !== null && <ShareLinkModal mediaId={shareId} onClose={() => setShareId(null)} />}
+    </div>,
+    document.body,
   );
 };
 

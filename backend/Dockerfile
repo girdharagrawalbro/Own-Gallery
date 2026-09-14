@@ -19,4 +19,9 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "2"]
+# Media requests are I/O bound (waiting on Telegram), so use many threads per
+# worker: a video stream holds a thread for as long as the viewer keeps loading.
+ENV GUNICORN_WORKERS=2 \
+    GUNICORN_THREADS=24
+
+CMD ["sh", "-c", "exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers ${GUNICORN_WORKERS} --threads ${GUNICORN_THREADS} --timeout 120 --graceful-timeout 30 --keep-alive 15 --access-logfile -"]

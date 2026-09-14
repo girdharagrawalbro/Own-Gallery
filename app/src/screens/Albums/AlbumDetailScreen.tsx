@@ -1,37 +1,32 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    FlatList,
-    Pressable,
-    RefreshControl,
+    Alert,
     StyleSheet,
     Text,
+    ToastAndroid,
     TouchableOpacity,
     View,
-    Alert,
-    ToastAndroid,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ImageOff, Image as ImageIcon, Plus, ChevronLeft } from 'lucide-react-native';
-import AuthenticatedImage from '../../components/AuthenticatedImage';
-import VideoThumbnail from '../../components/VideoThumbnail';
+import { ChevronLeft, Image as ImageIcon, Plus } from 'lucide-react-native';
+import { launchImageLibrary, Asset } from 'react-native-image-picker';
+
+import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from '../Gallery/MediaViewer';
 import AddMediaModal from './AddMediaModal';
+import UploadPreviewModal from '../Gallery/UploadPreviewModal';
 import { getAlbumMedia, removeMediaFromAlbum } from '../../api/albums';
 import { Media } from '../../types/media';
-import { launchImageLibrary, Asset } from 'react-native-image-picker';
-import UploadPreviewModal from '../Gallery/UploadPreviewModal';
-
-const { width } = Dimensions.get('window');
-const CELL = (width - 4) / 3;
+import { useUploadActions } from '../../context/UploadContext';
 
 const AlbumDetailScreen = () => {
     const navigation = useNavigation<any>();
     const route = useRoute<any>();
     const insets = useSafeAreaInsets();
     const { albumId, albumName } = route.params;
+    const { completedVersion } = useUploadActions();
+    const gridRef = useRef<MediaGridHandle>(null);
 
     const [media, setMedia] = useState<Media[]>([]);
     const [loading, setLoading] = useState(true);
@@ -43,7 +38,7 @@ const AlbumDetailScreen = () => {
     const [uploadModalVisible, setUploadModalVisible] = useState(false);
     const [uploadAssets, setUploadAssets] = useState<Asset[]>([]);
 
-    const fetchMedia = async () => {
+    const fetchMedia = useCallback(async () => {
         try {
             const data = await getAlbumMedia(albumId);
             setMedia(data.media);
@@ -53,90 +48,85 @@ const AlbumDetailScreen = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [albumId]);
 
     useEffect(() => {
         fetchMedia();
-    }, [albumId]);
+    }, [fetchMedia]);
+
+    // Uploads into this album finished processing.
+    useEffect(() => {
+        if (completedVersion > 0) {
+            fetchMedia();
+        }
+    }, [completedVersion, fetchMedia]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchMedia();
-    }, []);
+    }, [fetchMedia]);
 
     const handleAddPress = () => {
-        Alert.alert(
-            'Add Media to Album',
-            'Choose a source',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Select from Gallery',
-                    onPress: () => setAddModalVisible(true)
-                },
-                {
-                    text: 'Upload from Device',
-                    onPress: async () => {
-                        const result = await launchImageLibrary({
-                            mediaType: 'mixed',
-                            selectionLimit: 0,
-                            includeExtra: true,
-                        });
-                        if (result.assets && result.assets.length > 0) {
-                            setUploadAssets(result.assets);
-                            setUploadModalVisible(true);
-                        }
+        Alert.alert('Add Media to Album', 'Choose a source', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Select from Gallery', onPress: () => setAddModalVisible(true) },
+            {
+                text: 'Upload from Device',
+                onPress: async () => {
+                    const result = await launchImageLibrary({
+                        mediaType: 'mixed',
+                        selectionLimit: 0,
+                        includeExtra: true,
+                    });
+                    if (result.assets && result.assets.length > 0) {
+                        setUploadAssets(result.assets);
+                        setUploadModalVisible(true);
                     }
-                }
-            ]
-        );
+                },
+            },
+        ]);
     };
 
-    const openViewer = useCallback((index: number) => {
+    const openViewer = useCallback((_item: Media, index: number) => {
+        if (index < 0) { return; }
         setSelectedIndex(index);
         setViewerVisible(true);
     }, []);
 
-    const handleLongPress = (item: Media) => {
-        Alert.alert(
-            'Remove Media',
-            'Do you want to remove this item from the album?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Remove',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await removeMediaFromAlbum(albumId, [item.id]);
-                            ToastAndroid.show('Removed from album', ToastAndroid.SHORT);
-                            onRefresh();
-                        } catch (err) {
-                            Alert.alert('Error', 'Failed to remove media');
-                        }
+    const handleLongPress = useCallback((item: Media) => {
+        Alert.alert('Remove Media', 'Do you want to remove this item from the album?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await removeMediaFromAlbum(albumId, [item.id]);
+                        ToastAndroid.show('Removed from album', ToastAndroid.SHORT);
+                        setMedia(prev => prev.filter(m => m.id !== item.id));
+                    } catch {
+                        Alert.alert('Error', 'Failed to remove media');
                     }
-                }
-            ]
-        );
-    };
+                },
+            },
+        ]);
+    }, [albumId]);
 
-    const renderItem = useCallback(({ item, index }: { item: Media; index: number }) => (
-        <Pressable
-            style={styles.cell}
-            onPress={() => openViewer(index)}
-            onLongPress={() => handleLongPress(item)}
-            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}>
-            {item.media_type === 'video' ? (
-                <VideoThumbnail thumbnailUrl={item.thumbnail_url} duration={item.duration} />
-            ) : item.thumbnail_url ? (
-                <AuthenticatedImage uri={item.thumbnail_url} style={styles.cellImage} resizeMode="cover" cacheOnDisk={true} />
-            ) : (
-                <View style={styles.noThumb}><ImageOff size={24} color="#ccc" /></View>
-            )}
-        </Pressable>
-    ), [openViewer]);
+    const handleViewerClose = useCallback((lastIndex: number) => {
+        setViewerVisible(false);
+        const item = media[lastIndex];
+        if (item) {
+            requestAnimationFrame(() => gridRef.current?.scrollToMedia(item.id));
+        }
+    }, [media]);
 
-    const keyExtractor = useCallback((item: Media) => item.id.toString(), []);
+    const handleMediaUpdated = useCallback((updated: Media) => {
+        setMedia(prev => prev.map(m => (m.id === updated.id ? updated : m)));
+    }, []);
+
+    const handleMediaDeleted = useCallback((deletedId: number) => {
+        setMedia(prev => prev.filter(m => m.id !== deletedId));
+    }, []);
 
     return (
         <View style={styles.container}>
@@ -144,35 +134,29 @@ const AlbumDetailScreen = () => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={15}>
                     <ChevronLeft size={28} color="#1a73e8" />
                 </TouchableOpacity>
-                <Text style={styles.heading} numberOfLines={1}>{albumName}</Text>
+                <View style={styles.titleBlock}>
+                    <Text style={styles.heading} numberOfLines={1}>{albumName}</Text>
+                    {!loading && <Text style={styles.subheading}>{media.length} items</Text>}
+                </View>
                 <View style={styles.spacer} />
             </View>
 
-            {loading ? (
-                <View style={styles.centerContainer}>
-                    <ActivityIndicator size="large" color="#1a73e8" />
-                </View>
-            ) : (
-                <FlatList
-                    data={media}
-                    numColumns={3}
-                    keyExtractor={keyExtractor}
-                    renderItem={renderItem}
-                    contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                    ListEmptyComponent={
-                        <View style={styles.emptyState}>
-                            <ImageIcon size={64} color="#ccc" style={{ marginBottom: 16 }} />
-                            <Text style={styles.emptyTitle}>Empty Album</Text>
-                        </View>
-                    }
-                    getItemLayout={(_, index) => ({
-                        length: CELL,
-                        offset: CELL * Math.floor(index / 3),
-                        index,
-                    })}
-                />
-            )}
+            <MediaGrid
+                ref={gridRef}
+                media={media}
+                onPressItem={openViewer}
+                onLongPressItem={handleLongPress}
+                loading={loading}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                bottomPadding={insets.bottom + 100}
+                ListEmptyComponent={
+                    <View style={styles.emptyState}>
+                        <ImageIcon size={64} color="#ccc" style={styles.emptyIcon} />
+                        <Text style={styles.emptyTitle}>Empty Album</Text>
+                    </View>
+                }
+            />
 
             <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 16, 16) }]} onPress={handleAddPress}>
                 <Plus size={28} color="#fff" />
@@ -182,13 +166,9 @@ const AlbumDetailScreen = () => {
                 visible={viewerVisible}
                 media={media}
                 initialIndex={selectedIndex}
-                onClose={() => setViewerVisible(false)}
-                onMediaUpdated={(updatedMedia) => {
-                    setMedia(prev => prev.map(m => m.id === updatedMedia.id ? updatedMedia : m));
-                }}
-                onMediaDeleted={(deletedId) => {
-                    setMedia(prev => prev.filter(m => m.id !== deletedId));
-                }}
+                onClose={handleViewerClose}
+                onMediaUpdated={handleMediaUpdated}
+                onMediaDeleted={handleMediaDeleted}
             />
 
             <AddMediaModal
@@ -203,7 +183,7 @@ const AlbumDetailScreen = () => {
                 assets={uploadAssets}
                 albumId={albumId}
                 onClose={() => setUploadModalVisible(false)}
-                onUploadComplete={onRefresh}
+                onUploadComplete={() => {}}
             />
         </View>
     );
@@ -213,39 +193,37 @@ export default AlbumDetailScreen;
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    
-    header: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        paddingHorizontal: 16, 
-        paddingBottom: 12, 
+
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingBottom: 8,
         backgroundColor: '#fff',
     },
     backBtn: { padding: 8, marginLeft: -8 },
-    heading: { flex: 1, fontSize: 20, fontWeight: '500', color: '#3c4043', textAlign: 'center' },
-    spacer: { width: 50 }, // To balance the back button width
-    
-    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#f1f3f4', overflow: 'hidden' },
-    cellImage: { width: '100%', height: '100%' },
-    noThumb: { flex: 1, backgroundColor: '#f1f3f4', justifyContent: 'center', alignItems: 'center' },
-    
+    titleBlock: { flex: 1, alignItems: 'center' },
+    heading: { fontSize: 20, fontWeight: '500', color: '#3c4043', textAlign: 'center' },
+    subheading: { fontSize: 12, color: '#5f6368', marginTop: 2 },
+    spacer: { width: 36 },
+
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
+    emptyIcon: { marginBottom: 16 },
     emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
-    
-    fab: { 
-        position: 'absolute', 
-        right: 20, 
-        width: 56, 
-        height: 56, 
-        borderRadius: 16, 
-        backgroundColor: '#1a73e8', // Google Blue
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        elevation: 6, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: 3 }, 
-        shadowOpacity: 0.25, 
-        shadowRadius: 5 
+
+    fab: {
+        position: 'absolute',
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 16,
+        backgroundColor: '#1a73e8',
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
     },
 });

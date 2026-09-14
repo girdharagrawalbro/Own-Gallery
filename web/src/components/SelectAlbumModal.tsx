@@ -1,72 +1,94 @@
-import React, { useEffect, useState } from 'react';
-import { X, Image as ImageIcon } from 'lucide-react';
-import { apiClient } from '../api/client';
-
-interface Album {
-  id: number;
-  name: string;
-}
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
+import { Image as ImageIcon, Plus, X } from 'lucide-react';
+import { api, getErrorMessage } from '../api/client';
+import type { Album } from '../types/media';
+import MediaImage from './MediaImage';
+import Modal from './Modal';
 
 interface SelectAlbumModalProps {
   onClose: () => void;
-  onSelect: (albumId: number) => void;
+  onSelect: (album: Album) => void;
 }
 
-const SelectAlbumModal: React.FC<SelectAlbumModalProps> = ({ onClose, onSelect }) => {
-  const [albums, setAlbums] = useState<Album[]>([]);
-  const [loading, setLoading] = useState(true);
+const SelectAlbumModal = ({ onClose, onSelect }: SelectAlbumModalProps) => {
+  const [albums, setAlbums] = useState<Album[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    fetchAlbums();
+    let cancelled = false;
+    api
+      .listAlbums()
+      .then((list) => {
+        if (!cancelled) setAlbums(list);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(getErrorMessage(err, 'Failed to load albums'));
+          setAlbums([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const fetchAlbums = async () => {
+  const handleCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name) return;
+    setCreating(true);
     try {
-      const response = await apiClient.get('/albums/');
-      setAlbums(response.data.results || response.data);
-    } catch (error) {
-      console.error('Failed to fetch albums', error);
-    } finally {
-      setLoading(false);
+      const album = await api.createAlbum(name);
+      onSelect(album);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to create album'));
+      setCreating(false);
     }
   };
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-    }}>
-      <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '400px', background: 'var(--bg-color)', padding: 0 }}>
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '500' }}>Add to Album</h2>
-          <button className="btn-icon" onClick={onClose}><X size={20} /></button>
-        </div>
-        
-        <div style={{ maxHeight: '300px', overflowY: 'auto', padding: '12px' }}>
-          {loading ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
-          ) : albums.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>No albums available. Create one in the Albums tab.</div>
-          ) : (
-            albums.map(album => (
-              <button
-                key={album.id}
-                onClick={() => onSelect(album.id)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px',
-                  borderRadius: '8px', transition: 'background 0.2s', textAlign: 'left', color: 'var(--text-primary)'
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <ImageIcon size={20} color="var(--text-secondary)" />
-                {album.name}
-              </button>
-            ))
-          )}
-        </div>
+    <Modal onClose={onClose} labelledBy="select-album-title">
+      <div className="modal-header">
+        <h2 id="select-album-title">Add to album</h2>
+        <button className="btn-icon" onClick={onClose} aria-label="Close">
+          <X size={20} />
+        </button>
       </div>
-    </div>
+
+      <form className="new-album-row" onSubmit={handleCreate}>
+        <input
+          className="input-field"
+          placeholder="New album title"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+        <button type="submit" className="btn-primary sm" disabled={creating || !newName.trim()}>
+          <Plus size={16} /> {creating ? 'Creating…' : 'Create'}
+        </button>
+      </form>
+
+      {error && <div className="form-error">{error}</div>}
+
+      <div className="album-pick-list">
+        {albums === null ? (
+          <div className="muted-center">Loading…</div>
+        ) : albums.length === 0 ? (
+          <div className="muted-center">No albums yet. Create one above.</div>
+        ) : (
+          albums.map((album) => (
+            <button key={album.id} className="album-pick" onClick={() => onSelect(album)}>
+              <div className="album-pick-cover">
+                {album.cover_url ? <MediaImage src={album.cover_url} alt="" /> : <ImageIcon size={20} />}
+              </div>
+              <span>{album.name}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </Modal>
   );
 };
 

@@ -1,52 +1,65 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
-    Dimensions,
-    FlatList,
+    Animated,
+    BackHandler,
+    Keyboard,
     Pressable,
-    RefreshControl,
     StyleSheet,
     Text,
     TextInput,
+    ToastAndroid,
     TouchableOpacity,
     View,
-    ToastAndroid,
-    Animated,
-    Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
+import {
+    Download,
+    FolderPlus,
+    Heart,
+    Image as ImageIcon,
+    Plus,
+    RefreshCw,
+    Search,
+    Trash2,
+    X,
+} from 'lucide-react-native';
 
-import { ImageOff, Heart, Check, Image as ImageIcon, Trash2, X, Plus, Search, Download, FolderPlus } from 'lucide-react-native';
-import AuthenticatedImage from '../../components/AuthenticatedImage';
+import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from './MediaViewer';
-import VideoThumbnail from '../../components/VideoThumbnail';
-import { prefetchThumbnails } from '../../utils/prefetch';
-import { getMedia, bulkTrash, bulkFavorite, downloadMediaToDevice } from '../../api/media';
-import { Media } from '../../types/media';
-import { useAuth } from '../../context/AuthContext';
 import UploadPreviewModal from './UploadPreviewModal';
 import SelectAlbumModal from '../Albums/SelectAlbumModal';
-
-const { width } = Dimensions.get('window');
-const CELL = (width - 4) / 3;
+import { bulkFavorite, bulkTrash, downloadMediaToDevice, getMedia } from '../../api/media';
+import { Media } from '../../types/media';
+import { useAuth } from '../../context/AuthContext';
+import { useUploadActions } from '../../context/UploadContext';
+import { mediaDate } from '../../utils/format';
 
 type LoadState = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'error';
 
-type ListItem =
-    | { type: 'header'; title: string; id: string; mediaIds: number[] }
-    | { type: 'row'; items: Media[]; id: string };
+const EMPTY_SELECTION = new Set<number>();
+
+/** Merge a fresh first page into the loaded list (keeps later pages), newest first. */
+const mergeMedia = (prev: Media[], fresh: Media[]): Media[] => {
+    const byId = new Map<number, Media>();
+    prev.forEach(m => byId.set(m.id, m));
+    fresh.forEach(m => byId.set(m.id, m));
+    return Array.from(byId.values()).sort(
+        (a, b) => mediaDate(b).getTime() - mediaDate(a).getTime(),
+    );
+};
 
 const GalleryScreen = () => {
     const { logout, user } = useAuth();
+    const { completedVersion } = useUploadActions();
     const insets = useSafeAreaInsets();
-    
+    const gridRef = useRef<MediaGridHandle>(null);
+
     const [media, setMedia] = useState<Media[]>([]);
     const [loadState, setLoadState] = useState<LoadState>('loading');
     const [error, setError] = useState<string | null>(null);
-    const [page, setPage] = useState(1);
-    const [hasMore, setHasMore] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const [viewerVisible, setViewerVisible] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -54,91 +67,124 @@ const GalleryScreen = () => {
     const [previewVisible, setPreviewVisible] = useState(false);
     const [selectedAssets, setSelectedAssets] = useState<Asset[]>([]);
 
-    const [searchQuery, setSearchQuery] = useState('');
-    
-    // Selection State
-    const [selectionMode, setSelectionMode] = useState(false);
-    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-    
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(EMPTY_SELECTION);
+    const selectionMode = selectedIds.size > 0;
     const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
 
-    // Animations
     const selectionAnim = useRef(new Animated.Value(0)).current;
 
-    useEffect(() => {
-        Animated.timing(selectionAnim, {
-            toValue: selectionMode ? 1 : 0,
-            duration: 250,
-            useNativeDriver: true,
-        }).start();
-    }, [selectionMode]);
-
+    // Refs so callbacks stay stable and async responses can be discarded when stale.
     const isMounted = useRef(true);
+    const requestId = useRef(0);
+    const pageRef = useRef(1);
+    const hasMoreRef = useRef(true);
+    const busyRef = useRef(false);
+    const searchRef = useRef('');
+    const logoutRef = useRef(logout);
+    logoutRef.current = logout;
+
     useEffect(() => {
         isMounted.current = true;
         return () => { isMounted.current = false; };
     }, []);
 
-    const fetchMedia = useCallback(async (
+    useEffect(() => {
+        Animated.timing(selectionAnim, {
+            toValue: selectionMode ? 1 : 0,
+            duration: 220,
+            useNativeDriver: true,
+        }).start();
+    }, [selectionMode, selectionAnim]);
+
+    const clearSelection = useCallback(() => setSelectedIds(EMPTY_SELECTION), []);
+
+    // Hardware back exits selection mode first.
+    useEffect(() => {
+        if (!selectionMode) { return; }
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            clearSelection();
+            return true;
+        });
+        return () => sub.remove();
+    }, [selectionMode, clearSelection]);
+
+    const fetchPage = useCallback(async (
         pageNumber: number,
-        mode: 'initial' | 'refresh' | 'more',
+        mode: 'initial' | 'refresh' | 'more' | 'silent',
     ) => {
+        const id = ++requestId.current;
+        busyRef.current = true;
         if (mode === 'initial') { setLoadState('loading'); }
         else if (mode === 'refresh') { setLoadState('refreshing'); }
-        else { setLoadState('loadingMore'); }
-
+        else if (mode === 'more') { setLoadState('loadingMore'); }
         setError(null);
 
         try {
-            const search = searchQuery.trim() || undefined;
-            const response = await getMedia(pageNumber, false, search, undefined);
-
-            if (!isMounted.current) { return; }
+            const response = await getMedia({
+                page: pageNumber,
+                search: searchRef.current.trim() || undefined,
+            });
+            if (!isMounted.current || id !== requestId.current) { return; }
 
             if (mode === 'more') {
                 setMedia(prev => {
-                    const existingIds = new Set(prev.map(m => m.id));
-                    const newItems = response.results.filter((m: Media) => !existingIds.has(m.id));
-                    prefetchThumbnails(newItems);
-                    return [...prev, ...newItems];
+                    const existing = new Set(prev.map(m => m.id));
+                    return [...prev, ...response.results.filter(m => !existing.has(m.id))];
                 });
+                pageRef.current = pageNumber;
+                hasMoreRef.current = !!response.next;
+            } else if (mode === 'silent') {
+                setMedia(prev => mergeMedia(prev, response.results));
+                if (pageRef.current <= 1) {
+                    hasMoreRef.current = !!response.next;
+                }
             } else {
-                prefetchThumbnails(response.results);
                 setMedia(response.results);
+                pageRef.current = pageNumber;
+                hasMoreRef.current = !!response.next;
             }
-
-            setPage(pageNumber);
-            setHasMore(!!response.next);
             setLoadState('idle');
         } catch (err: any) {
-            if (!isMounted.current) { return; }
-
+            if (!isMounted.current || id !== requestId.current) { return; }
             if (err?.response?.status === 401) {
-                logout();
+                logoutRef.current();
                 return;
             }
-
             setError(err?.response?.data?.detail || err?.message || 'Failed to load media.');
-            setLoadState('error');
+            setLoadState(mode === 'silent' ? 'idle' : 'error');
+        } finally {
+            if (id === requestId.current) {
+                busyRef.current = false;
+            }
         }
-    }, [logout, searchQuery]);
+    }, []);
 
+    // Initial load + debounced search.
+    const firstLoad = useRef(true);
     useEffect(() => {
-        const timeout = setTimeout(() => {
-            fetchMedia(1, 'initial');
-        }, 300);
+        searchRef.current = searchQuery;
+        const delay = firstLoad.current ? 0 : 350;
+        firstLoad.current = false;
+        const timeout = setTimeout(() => fetchPage(1, 'initial'), delay);
         return () => clearTimeout(timeout);
-    }, [searchQuery]);
+    }, [searchQuery, fetchPage]);
+
+    // New uploads finished: merge them in without resetting the scroll position.
+    useEffect(() => {
+        if (completedVersion > 0) {
+            fetchPage(1, 'silent');
+        }
+    }, [completedVersion, fetchPage]);
 
     const onRefresh = useCallback(() => {
-        fetchMedia(1, 'refresh');
-    }, [fetchMedia]);
+        fetchPage(1, 'refresh');
+    }, [fetchPage]);
 
     const onEndReached = useCallback(() => {
-        if (loadState === 'idle' && hasMore) {
-            fetchMedia(page + 1, 'more');
+        if (!busyRef.current && hasMoreRef.current) {
+            fetchPage(pageRef.current + 1, 'more');
         }
-    }, [loadState, hasMore, page, fetchMedia]);
+    }, [fetchPage]);
 
     const handleUpload = async () => {
         const result = await launchImageLibrary({
@@ -146,212 +192,144 @@ const GalleryScreen = () => {
             selectionLimit: 0,
             includeExtra: true,
         });
-
         if (result.assets && result.assets.length > 0) {
             setSelectedAssets(result.assets);
             setPreviewVisible(true);
         }
     };
 
-    const toggleSelectionMode = useCallback((item: Media) => {
-        setSelectionMode(true);
-        setSelectedIds(new Set([item.id]));
-    }, []);
+    // ── Selection ───────────────────────────────────────────────────────────
 
     const toggleSelection = useCallback((id: number) => {
         setSelectedIds(prev => {
             const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            if (next.size === 0) setSelectionMode(false);
+            if (next.has(id)) { next.delete(id); } else { next.add(id); }
             return next;
         });
     }, []);
 
-    const toggleDateGroup = useCallback((mediaIds: number[]) => {
-        if (!selectionMode) setSelectionMode(true);
+    const toggleDateGroup = useCallback((ids: number[]) => {
         setSelectedIds(prev => {
             const next = new Set(prev);
-            const allSelected = mediaIds.length > 0 && mediaIds.every(id => next.has(id));
+            const allSelected = ids.length > 0 && ids.every(id => next.has(id));
             if (allSelected) {
-                mediaIds.forEach(id => next.delete(id));
+                ids.forEach(id => next.delete(id));
             } else {
-                mediaIds.forEach(id => next.add(id));
+                ids.forEach(id => next.add(id));
             }
-            if (next.size === 0) setSelectionMode(false);
             return next;
         });
-    }, [selectionMode]);
+    }, []);
 
-    const openViewer = useCallback((mediaItem: Media) => {
-        const index = media.findIndex(m => m.id === mediaItem.id);
-        if (index !== -1) {
+    const handlePressItem = useCallback((item: Media, index: number) => {
+        if (selectionMode) {
+            toggleSelection(item.id);
+        } else if (index >= 0) {
+            Keyboard.dismiss();
             setSelectedIndex(index);
             setViewerVisible(true);
         }
+    }, [selectionMode, toggleSelection]);
+
+    const handleLongPressItem = useCallback((item: Media) => {
+        toggleSelection(item.id);
+    }, [toggleSelection]);
+
+    // ── Viewer callbacks ────────────────────────────────────────────────────
+
+    const handleViewerClose = useCallback((lastIndex: number) => {
+        setViewerVisible(false);
+        const item = media[lastIndex];
+        if (item) {
+            requestAnimationFrame(() => gridRef.current?.scrollToMedia(item.id));
+        }
     }, [media]);
 
-    const handleMediaPress = useCallback((item: Media) => {
-        if (selectionMode) {
-            toggleSelection(item.id);
-        } else {
-            openViewer(item);
-        }
-    }, [selectionMode, toggleSelection, openViewer]);
+    const handleMediaUpdated = useCallback((updated: Media) => {
+        setMedia(prev => prev.map(m => (m.id === updated.id ? updated : m)));
+    }, []);
 
-    const handleMediaLongPress = useCallback((item: Media) => {
-        if (!selectionMode) {
-            toggleSelectionMode(item);
-        }
-    }, [selectionMode, toggleSelectionMode]);
+    const handleMediaDeleted = useCallback((deletedId: number) => {
+        setMedia(prev => prev.filter(m => m.id !== deletedId));
+    }, []);
 
-    // Group media by date
-    const listData = React.useMemo(() => {
-        const groups: { [date: string]: Media[] } = {};
-        media.forEach(m => {
-            const dateStr = new Date(m.taken_at || m.created_at).toLocaleDateString(undefined, {
-                year: 'numeric', month: 'long', day: 'numeric'
-            });
-            if (!groups[dateStr]) groups[dateStr] = [];
-            groups[dateStr].push(m);
-        });
-
-        const result: ListItem[] = [];
-        for (const [dateStr, items] of Object.entries(groups)) {
-            result.push({ type: 'header', title: dateStr, id: `header-${dateStr}`, mediaIds: items.map(m => m.id) });
-            for (let i = 0; i < items.length; i += 3) {
-                const chunk = items.slice(i, i + 3);
-                result.push({ type: 'row', items: chunk, id: `row-${chunk[0].id}` });
-            }
-        }
-        return result;
-    }, [media]);
-
-    const renderItem = useCallback(({ item }: { item: ListItem }) => {
-        if (item.type === 'header') {
-            const isAllSelected = item.mediaIds.every(id => selectedIds.has(id));
-            return (
-                <View style={styles.dateHeaderContainer}>
-                    <Text style={styles.dateHeaderText}>{item.title}</Text>
-                    {selectionMode && (
-                        <TouchableOpacity onPress={() => toggleDateGroup(item.mediaIds)} style={styles.dateGroupSelectBtn}>
-                            <View style={[styles.dateGroupCheckBadge, isAllSelected && styles.dateGroupCheckBadgeActive]}>
-                                {isAllSelected && <Check size={14} color="#fff" strokeWidth={3} />}
-                            </View>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            );
-        }
-
-        return (
-            <View style={styles.row}>
-                {item.items.map(mediaItem => {
-                    const isSelected = selectedIds.has(mediaItem.id);
-                    return (
-                        <Pressable
-                            key={mediaItem.id}
-                            style={styles.cell}
-                            onPress={() => handleMediaPress(mediaItem)}
-                            onLongPress={() => handleMediaLongPress(mediaItem)}
-                        >
-                            <Animated.View style={[
-                                styles.cellImageContainer,
-                                isSelected && { transform: [{ scale: 0.85 }], borderRadius: 12 }
-                            ]}>
-                                {mediaItem.media_type === 'video' ? (
-                                    <VideoThumbnail thumbnailUrl={mediaItem.thumbnail_url} duration={mediaItem.duration} />
-                                ) : mediaItem.thumbnail_url ? (
-                                    <AuthenticatedImage uri={mediaItem.thumbnail_url} style={styles.cellImage} resizeMode="cover" cacheOnDisk={true} />
-                                ) : (
-                                    <View style={styles.noThumb}><ImageOff size={24} color="#ccc" /></View>
-                                )}
-                            </Animated.View>
-
-                            {mediaItem.is_favorite && !selectionMode && (
-                                <View style={styles.favoriteBadge}>
-                                    <Heart size={16} color="#FF3B30" fill="#FF3B30" />
-                                </View>
-                            )}
-
-                            {mediaItem.status === 'processing' && (
-                                <View style={styles.processingOverlay}>
-                                    <ActivityIndicator size="small" color="#fff" />
-                                </View>
-                            )}
-
-                            {selectionMode && (
-                                <View style={styles.selectionOverlay}>
-                                    {isSelected && (
-                                        <View style={styles.checkBadge}>
-                                            <Check size={14} color="#fff" strokeWidth={3} />
-                                        </View>
-                                    )}
-                                </View>
-                            )}
-                        </Pressable>
-                    );
-                })}
-                {Array.from({ length: 3 - item.items.length }).map((_, i) => (
-                    <View key={`empty-${i}`} style={[styles.cell, { backgroundColor: 'transparent' }]} />
-                ))}
-            </View>
-        );
-    }, [handleMediaPress, handleMediaLongPress, selectionMode, selectedIds, toggleDateGroup]);
+    // ── Bulk actions ────────────────────────────────────────────────────────
 
     const handleBulkTrash = () => {
-        Alert.alert('Move to Trash', `Move ${selectedIds.size} items to trash?`, [
+        const ids = Array.from(selectedIds);
+        Alert.alert('Move to Trash', `Move ${ids.length} items to trash?`, [
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Trash', style: 'destructive', onPress: async () => {
                     try {
-                        await bulkTrash(Array.from(selectedIds));
-                        ToastAndroid.show(`${selectedIds.size} items moved to trash`, ToastAndroid.SHORT);
-                        setMedia(prev => prev.filter(m => !selectedIds.has(m.id)));
-                        setSelectionMode(false);
-                        setSelectedIds(new Set());
-                    } catch (err) {
+                        await bulkTrash(ids);
+                        ToastAndroid.show(`${ids.length} items moved to trash`, ToastAndroid.SHORT);
+                        const removed = new Set(ids);
+                        setMedia(prev => prev.filter(m => !removed.has(m.id)));
+                        clearSelection();
+                    } catch {
                         Alert.alert('Error', 'Failed to trash items.');
                     }
-                }
-            }
+                },
+            },
         ]);
     };
 
     const handleBulkFavorite = async () => {
+        const ids = Array.from(selectedIds);
         try {
-            await bulkFavorite(Array.from(selectedIds), true);
-            ToastAndroid.show(`${selectedIds.size} items added to favorites`, ToastAndroid.SHORT);
-            setMedia(prev => prev.map(m => selectedIds.has(m.id) ? { ...m, is_favorite: true } : m));
-            setSelectionMode(false);
-            setSelectedIds(new Set());
-        } catch (err) {
+            await bulkFavorite(ids, true);
+            ToastAndroid.show(`${ids.length} items added to favorites`, ToastAndroid.SHORT);
+            const favored = new Set(ids);
+            setMedia(prev => prev.map(m => (favored.has(m.id) ? { ...m, is_favorite: true } : m)));
+            clearSelection();
+        } catch {
             Alert.alert('Error', 'Failed to favorite items.');
         }
     };
 
     const handleBulkDownload = async () => {
-        ToastAndroid.show(`Downloading ${selectedIds.size} items...`, ToastAndroid.SHORT);
-        try {
-            const selectedMedia = media.filter(m => selectedIds.has(m.id));
-            for (const item of selectedMedia) {
-                await downloadMediaToDevice(item.id, item.filename, true);
+        const items = media.filter(m => selectedIds.has(m.id));
+        clearSelection();
+        ToastAndroid.show(`Downloading ${items.length} items...`, ToastAndroid.SHORT);
+        let failed = 0;
+        for (const item of items) {
+            try {
+                await downloadMediaToDevice(item, true);
+            } catch {
+                failed += 1;
             }
-            ToastAndroid.show(`Successfully saved ${selectedIds.size} items to device gallery!`, ToastAndroid.SHORT);
-            setSelectionMode(false);
-            setSelectedIds(new Set());
-        } catch (err) {
-            Alert.alert('Error', 'Failed to save one or more items to device.');
+        }
+        if (failed > 0) {
+            Alert.alert('Error', `Failed to save ${failed} of ${items.length} items to device.`);
+        } else {
+            ToastAndroid.show(`Saved ${items.length} items to device gallery!`, ToastAndroid.SHORT);
         }
     };
 
-    const handleAddAlbum = () => {
-        setSelectAlbumVisible(true);
-    };
+    const selectedIdList = React.useMemo(() => Array.from(selectedIds), [selectedIds]);
+
+    const emptyComponent = loadState === 'error' ? (
+        <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Couldn't load your photos</Text>
+            {!!error && <Text style={styles.emptySubtitle}>{error}</Text>}
+            <TouchableOpacity style={styles.retryBtn} onPress={() => fetchPage(1, 'initial')}>
+                <RefreshCw size={16} color="#fff" />
+                <Text style={styles.retryText}>Try again</Text>
+            </TouchableOpacity>
+        </View>
+    ) : (
+        <View style={styles.emptyState}>
+            <ImageIcon size={64} color="#ccc" style={styles.emptyIcon} />
+            <Text style={styles.emptyTitle}>
+                {searchQuery.trim() ? 'No results' : 'No photos yet'}
+            </Text>
+        </View>
+    );
 
     return (
         <View style={styles.container}>
-            {/* Search Pill */}
+            {/* Search pill */}
             <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16) }]}>
                 <View style={styles.searchPill}>
                     <Search size={20} color="#777" style={styles.searchIcon} />
@@ -364,45 +342,34 @@ const GalleryScreen = () => {
                         returnKeyType="search"
                         onSubmitEditing={() => Keyboard.dismiss()}
                     />
-                    <View style={styles.profileAvatar}>
-                        <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
-                    </View>
+                    {searchQuery.length > 0 ? (
+                        <Pressable onPress={() => setSearchQuery('')} hitSlop={10} style={styles.clearSearch}>
+                            <X size={18} color="#5f6368" />
+                        </Pressable>
+                    ) : (
+                        <View style={styles.profileAvatar}>
+                            <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
+                        </View>
+                    )}
                 </View>
             </View>
 
-            {loadState === 'loading' && media.length === 0 ? (
-                <View style={styles.centerContainer}>
-                    <ActivityIndicator size="large" color="#007AFF" />
-                </View>
-            ) : (
-                <FlatList
-                    data={listData}
-                    extraData={selectedIds}
-                    keyExtractor={item => item.id}
-                    renderItem={renderItem}
-                    contentContainerStyle={{ paddingTop: 8, paddingBottom: 100 }}
-                    // Performance Props for smoothness
-                    windowSize={11}
-                    maxToRenderPerBatch={10}
-                    updateCellsBatchingPeriod={50}
-                    removeClippedSubviews={true}
-                    initialNumToRender={10}
-                    refreshControl={<RefreshControl refreshing={loadState === 'refreshing'} onRefresh={onRefresh} />}
-                    onEndReached={onEndReached}
-                    onEndReachedThreshold={0.5}
-                    ListFooterComponent={
-                        loadState === 'loadingMore' ? (
-                            <ActivityIndicator style={styles.footerSpinner} color="#555" />
-                        ) : <></>
-                    }
-                    ListEmptyComponent={
-                        <View style={styles.emptyState}>
-                            <ImageIcon size={64} color="#ccc" style={{ marginBottom: 16 }} />
-                            <Text style={styles.emptyTitle}>No photos found</Text>
-                        </View>
-                    }
-                />
-            )}
+            <MediaGrid
+                ref={gridRef}
+                media={media}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                onPressItem={handlePressItem}
+                onLongPressItem={handleLongPressItem}
+                onToggleGroup={toggleDateGroup}
+                loading={loadState === 'loading'}
+                refreshing={loadState === 'refreshing'}
+                onRefresh={onRefresh}
+                onEndReached={onEndReached}
+                loadingMore={loadState === 'loadingMore'}
+                ListEmptyComponent={emptyComponent}
+                bottomPadding={selectionMode ? 180 : 100}
+            />
 
             {!selectionMode && (
                 <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 16, 16) }]} onPress={handleUpload}>
@@ -410,28 +377,32 @@ const GalleryScreen = () => {
                 </TouchableOpacity>
             )}
 
-            {/* Sliding Bottom Action Bar for Selection Mode */}
-            <Animated.View style={[
-                styles.bottomBar,
-                { 
-                    paddingBottom: Math.max(insets.bottom, 16),
-                    transform: [{
-                        translateY: selectionAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [150, 0] // Slide up from bottom
-                        })
-                    }]
-                }
-            ]}>
+            {/* Selection action bar */}
+            <Animated.View
+                pointerEvents={selectionMode ? 'auto' : 'none'}
+                style={[
+                    styles.bottomBar,
+                    {
+                        paddingBottom: Math.max(insets.bottom, 16),
+                        opacity: selectionAnim,
+                        transform: [{
+                            translateY: selectionAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [150, 0],
+                            }),
+                        }],
+                    },
+                ]}
+            >
                 <View style={styles.bottomBarContent}>
                     <View style={styles.selectionTitleRow}>
-                        <TouchableOpacity onPress={() => setSelectionMode(false)} style={styles.closeSelectBtn}>
+                        <TouchableOpacity onPress={clearSelection} style={styles.closeSelectBtn}>
                             <X size={24} color="#444" />
                         </TouchableOpacity>
                         <Text style={styles.selectionCount}>{selectedIds.size} selected</Text>
                     </View>
                     <View style={styles.bottomBarActions}>
-                        <TouchableOpacity style={styles.actionBtn} onPress={handleAddAlbum}>
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => setSelectAlbumVisible(true)}>
                             <FolderPlus size={24} color="#444" />
                             <Text style={styles.actionText}>Add</Text>
                         </TouchableOpacity>
@@ -455,28 +426,23 @@ const GalleryScreen = () => {
                 visible={viewerVisible}
                 media={media}
                 initialIndex={selectedIndex}
-                onClose={() => setViewerVisible(false)}
-                onMediaUpdated={(updated) => setMedia(prev => prev.map(m => m.id === updated.id ? updated : m))}
-                onMediaDeleted={(deletedId) => setMedia(prev => prev.filter(m => m.id !== deletedId))}
+                onClose={handleViewerClose}
+                onMediaUpdated={handleMediaUpdated}
+                onMediaDeleted={handleMediaDeleted}
             />
-            
+
             <UploadPreviewModal
                 visible={previewVisible}
                 assets={selectedAssets}
                 onClose={() => setPreviewVisible(false)}
-                onUploadComplete={() => {
-                    onRefresh();
-                }}
+                onUploadComplete={() => {}}
             />
 
             <SelectAlbumModal
                 visible={selectAlbumVisible}
-                mediaId={Array.from(selectedIds)[0]}
-                onClose={() => {
-                    setSelectAlbumVisible(false);
-                    setSelectionMode(false);
-                    setSelectedIds(new Set());
-                }}
+                mediaIds={selectedIdList}
+                onClose={() => setSelectAlbumVisible(false)}
+                onAdded={clearSelection}
             />
         </View>
     );
@@ -486,8 +452,7 @@ export default GalleryScreen;
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    
+
     searchContainer: {
         paddingHorizontal: 16,
         paddingBottom: 8,
@@ -496,76 +461,59 @@ const styles = StyleSheet.create({
     searchPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f1f3f4', // Google standard search background
+        backgroundColor: '#f1f3f4',
         borderRadius: 24,
         paddingHorizontal: 16,
         height: 48,
     },
-    searchIcon: {
-        marginRight: 12,
-    },
+    searchIcon: { marginRight: 12 },
     searchInput: {
         flex: 1,
         fontSize: 16,
         color: '#222',
-        paddingVertical: 0, // important for Android
+        paddingVertical: 0,
     },
+    clearSearch: { padding: 4, marginLeft: 8 },
     profileAvatar: {
         width: 30,
         height: 30,
         borderRadius: 15,
-        backgroundColor: '#1a73e8', // Google Blue
+        backgroundColor: '#1a73e8',
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 12,
     },
-    profileInitial: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
+    profileInitial: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
 
-    dateHeaderContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14 },
-    dateHeaderText: { fontSize: 16, fontWeight: '600', color: '#3c4043' },
-    dateGroupSelectBtn: { padding: 4 },
-    dateGroupCheckBadge: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: '#dadce0', justifyContent: 'center', alignItems: 'center' },
-    dateGroupCheckBadgeActive: { backgroundColor: '#1a73e8', borderColor: '#1a73e8', borderWidth: 0 },
-
-    row: { flexDirection: 'row', width: '100%' },
-    cell: { width: CELL, height: CELL, margin: 0.5, overflow: 'hidden' },
-    cellImageContainer: { flex: 1, backgroundColor: '#eee', overflow: 'hidden' },
-    cellImage: { width: '100%', height: '100%' },
-    noThumb: { flex: 1, backgroundColor: '#f1f3f4', justifyContent: 'center', alignItems: 'center' },
-    
-    favoriteBadge: { 
-        position: 'absolute', 
-        top: 6, 
-        left: 6, 
-        padding: 4,
-    },
-
-    selectionOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, padding: 6 },
-    processingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-    checkBadge: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#1a73e8', justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-start', borderWidth: 1.5, borderColor: '#fff' },
-
-    footerSpinner: { paddingVertical: 24 },
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
+    emptyIcon: { marginBottom: 16 },
     emptyTitle: { fontSize: 18, fontWeight: '500', color: '#3c4043', marginBottom: 8 },
-    
-    fab: { 
-        position: 'absolute', 
-        right: 20, 
-        width: 56, 
-        height: 56, 
-        borderRadius: 16, 
-        backgroundColor: '#1a73e8', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        elevation: 6, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: 3 }, 
-        shadowOpacity: 0.25, 
-        shadowRadius: 5 
+    emptySubtitle: { fontSize: 14, color: '#5f6368', textAlign: 'center', marginBottom: 16 },
+    retryBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#1a73e8',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+    },
+    retryText: { color: '#fff', fontWeight: '600' },
+
+    fab: {
+        position: 'absolute',
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 16,
+        backgroundColor: '#1a73e8',
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
     },
 
     bottomBar: {
@@ -582,37 +530,16 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
     },
-    bottomBarContent: {
-        paddingTop: 16,
-        paddingHorizontal: 16,
-    },
-    selectionTitleRow: {
+    bottomBarContent: { paddingTop: 16, paddingHorizontal: 16 },
+    selectionTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+    closeSelectBtn: { marginRight: 16 },
+    selectionCount: { fontSize: 18, fontWeight: '500', color: '#222' },
+    bottomBarActions: {
         flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    closeSelectBtn: {
-        marginRight: 16,
-    },
-    selectionCount: { 
-        fontSize: 18, 
-        fontWeight: '500', 
-        color: '#222' 
-    },
-    bottomBarActions: { 
-        flexDirection: 'row', 
         justifyContent: 'space-between',
         paddingHorizontal: 10,
         paddingBottom: 8,
     },
-    actionBtn: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    actionText: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: '#444',
-        marginTop: 6,
-    }
+    actionBtn: { alignItems: 'center', justifyContent: 'center' },
+    actionText: { fontSize: 12, fontWeight: '500', color: '#444', marginTop: 6 },
 });

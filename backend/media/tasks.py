@@ -1,203 +1,177 @@
-import asyncio
+import hashlib
+import logging
 import os
-import tempfile
 
 from celery import shared_task
 from django.utils import timezone
 
-from .models import Media
-from telegram_storage.service import TelegramStorageService
 from telegram_storage.blob_storage import BlobStorageService
+from telegram_storage.storage import StorageError, TelegramStorage
+
+from . import processing
+from .models import Media, MediaVariant
+
+logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def _sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(4 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def apply_taken_at(media, taken_at, source):
+    """Keep the most trustworthy capture time seen so far."""
+    if not taken_at:
+        return
+    priority = processing.TAKEN_AT_PRIORITY
+    if priority.get(source, 0) > priority.get(media.taken_at_source, 0) or not media.taken_at:
+        media.taken_at = taken_at
+        media.taken_at_source = source
+
+
+def _fail(media, message):
+    media.status = "failed"
+    media.upload_error = message[:2000]
+    media.save(update_fields=["status", "upload_error", "updated_at"])
+
+
+def _store_variant(storage, media, kind, path, mime_type, width=None, height=None):
+    # Skip when an earlier attempt already stored it (task retries must not re-upload).
+    if not path or media.variants.filter(kind=kind).exists():
+        return
+    stored = storage.upload(path, f"{kind}_{media.id}{os.path.splitext(path)[1]}", mime_type,
+                            os.path.getsize(path))
+    MediaVariant.objects.create(
+        media=media,
+        kind=kind,
+        mime_type=mime_type,
+        file_size=stored["size"],
+        width=width,
+        height=height,
+        telegram_message_id=stored["message_id"],
+        telegram_file_id=stored["file_id"],
+    )
+
+
+@shared_task(bind=True, max_retries=4, default_retry_delay=60, acks_late=True)
 def upload_media_to_telegram(self, media_id):
-
     try:
         media = Media.objects.get(id=media_id)
     except Media.DoesNotExist:
-        print(f"Media {media_id} does not exist.")
+        logger.warning("Media %s does not exist", media_id)
         return
 
-    if media.status == "completed":
-        print(f"Media {media_id} is already completed.")
+    if media.status in ("completed", "duplicate"):
         return
 
     blob_name = media.temp_file_path
-
     if not blob_name:
-        media.status = "failed"
-        media.upload_error = "Temporary Blob file not found."
-        media.save()
-        print(f"No Blob path for Media {media_id}")
+        _fail(media, "Temporary upload file not found.")
         return
 
-    local_temp_path = None
+    storage = TelegramStorage()
+    blob_storage = BlobStorageService()
+    local_path = processing.temp_path(os.path.splitext(media.filename)[1], f"media_{media.id}_")
+    generated = []
 
     try:
-        print(f"Media {media_id}: downloading Blob {blob_name}")
+        blob_storage.download_file(blob_name, local_path)
+        size = os.path.getsize(local_path)
+        media.file_size = size
 
-        blob_storage = BlobStorageService()
+        if not media.file_hash:
+            media.file_hash = _sha256(local_path)
+            duplicate = (
+                Media.objects.filter(user=media.user, file_hash=media.file_hash, status="completed")
+                .exclude(pk=media.pk)
+                .first()
+            )
+            if duplicate:
+                media.status = "duplicate"
+                media.upload_error = f"Already in your library (media {duplicate.id})."
+                media.temp_file_path = None
+                media.save()
+                blob_storage.delete_file(blob_name)
+                return
+            media.save(update_fields=["file_hash", "file_size", "updated_at"])
 
-        # Create temporary file inside Celery container
-        ext = os.path.splitext(media.filename)[1]
+        # Fail fast (no retries) when this server can't store a file this big.
+        if size > storage.upload_limit:
+            raise StorageError(
+                f"File is {size // (1024 * 1024)} MB; this server can store at most "
+                f"{storage.upload_limit // (1024 * 1024)} MB. Set TELEGRAM_API_ID and "
+                "TELEGRAM_API_HASH to enable uploads up to 2 GB."
+            )
 
-        fd, local_temp_path = tempfile.mkstemp(
-            suffix=ext,
-            prefix=f"media_{media.id}_",
-        )
-        os.close(fd)
+        thumbnail_path = preview_path = stream_path = None
+        preview_dims = (None, None)
 
-        blob_storage.download_file(
-            blob_name,
-            local_temp_path,
-        )
-
-        print(
-            f"Media {media_id}: Blob downloaded to {local_temp_path}"
-        )
-
-        telegram_service = TelegramStorageService()
-
-        print(f"Media {media_id}: uploading to Telegram")
-
-        thumbnail_obj = None
-        local_thumb_path = None
-        media_width = None
-        media_height = None
-        media_duration = None
-
-        if media.mime_type:
+        if media.media_type == "image":
             try:
-                if media.mime_type.startswith("image/"):
-                    from PIL import Image, ImageOps
-                    with Image.open(local_temp_path) as img:
-                        img = ImageOps.exif_transpose(img)
-                        media_width, media_height = img.size
-                        
-                        img.thumbnail((320, 320))
-                        fd_thumb, local_thumb_path = tempfile.mkstemp(suffix=".jpg", prefix=f"thumb_{media.id}_")
-                        os.close(fd_thumb)
-                        img.convert("RGB").save(local_thumb_path, format="JPEG", quality=85)
-                        
-                        thumbnail_obj = open(local_thumb_path, "rb")
-                        print(f"Media {media_id}: Image thumbnail generated.")
-                        
-                elif media.mime_type.startswith("video/"):
-                    import subprocess
-                    import json
-                    
-                    # Extract dimensions and duration using ffprobe
-                    cmd_probe = [
-                        "ffprobe", "-v", "error", 
-                        "-select_streams", "v:0", 
-                        "-show_entries", "stream=width,height,duration", 
-                        "-of", "json", local_temp_path
-                    ]
-                    probe_result = subprocess.run(cmd_probe, capture_output=True, text=True)
-                    if probe_result.returncode == 0:
-                        try:
-                            probe_data = json.loads(probe_result.stdout)
-                            stream = probe_data.get("streams", [{}])[0]
-                            media_width = stream.get("width")
-                            media_height = stream.get("height")
-                            if stream.get("duration"):
-                                media_duration = float(stream.get("duration"))
-                        except Exception as e:
-                            print(f"Media {media_id}: ffprobe parsing failed: {e}")
+                info = processing.process_image(local_path, media.mime_type)
+                thumbnail_path, preview_path = info["thumbnail_path"], info["preview_path"]
+                generated += [thumbnail_path, preview_path]
+                media.width, media.height = info["width"], info["height"]
+                preview_dims = (info["preview_width"], info["preview_height"])
+                apply_taken_at(media, info["taken_at"], info["taken_at_source"])
+            except Exception as exc:  # unreadable image: still keep the original
+                logger.warning("Media %s: image processing failed: %s", media_id, exc)
+        else:
+            try:
+                info = processing.probe_video(local_path)
+                media.width, media.height, media.duration = info["width"], info["height"], info["duration"]
+                apply_taken_at(media, info["taken_at"], "metadata")
+                thumbnail_path, preview_path = processing.video_thumbnail(local_path, info["duration"])
+                generated += [thumbnail_path, preview_path]
+                plan = processing.plan_stream_variant(media.mime_type, info, local_path)
+                if plan and not media.variants.filter(kind=MediaVariant.STREAM).exists():
+                    stream_path = processing.build_stream_variant(local_path, plan, info)
+                    generated.append(stream_path)
+                    logger.info("Media %s: built %s stream variant", media_id, plan)
+            except Exception as exc:
+                logger.warning("Media %s: video processing failed: %s", media_id, exc)
 
-                    fd_thumb, local_thumb_path = tempfile.mkstemp(suffix=".jpg", prefix=f"thumb_{media.id}_")
-                    os.close(fd_thumb)
-                    
-                    # Extract a frame at 1 second mark (or 0 if very short)
-                    cmd = [
-                        "ffmpeg", "-y", "-i", local_temp_path,
-                        "-ss", "00:00:01.000", "-vframes", "1",
-                        "-vf", "scale='min(320,iw)':-1", # Resize to ~320px width for Telegram
-                        local_thumb_path
-                    ]
-                    result = subprocess.run(cmd, capture_output=True)
-                    
-                    # If extraction at 1 second fails, try at 0 seconds
-                    if result.returncode != 0 or not os.path.exists(local_thumb_path) or os.path.getsize(local_thumb_path) == 0:
-                        cmd[5] = "00:00:00.000"
-                        subprocess.run(cmd, capture_output=True)
+        if not media.telegram_message_id:
+            stored = storage.upload(local_path, media.filename, media.mime_type, size, thumbnail_path)
+            media.telegram_message_id = stored["message_id"]
+            media.telegram_file_id = stored["file_id"]
+            media.telegram_file_unique_id = stored["file_unique_id"]
+            media.telegram_thumbnail_file_id = stored["thumbnail_file_id"]
+            media.save()
 
-                    if os.path.exists(local_thumb_path) and os.path.getsize(local_thumb_path) > 0:
-                        thumbnail_obj = open(local_thumb_path, "rb")
-                        print(f"Media {media_id}: Video thumbnail extracted successfully.")
-                    else:
-                        print(f"Media {media_id}: Failed to extract video thumbnail.")
-            except Exception as e:
-                print(f"Media {media_id}: Exception during metadata/thumbnail extraction: {e}")
-
-        try:
-            with open(local_temp_path, "rb") as file_obj:
-                telegram_data = asyncio.run(
-                    telegram_service.upload_media(file_obj, thumbnail=thumbnail_obj, media_type=media.media_type)
-                )
-        finally:
-            if thumbnail_obj:
-                thumbnail_obj.close()
-            if local_thumb_path and os.path.exists(local_thumb_path):
-                os.remove(local_thumb_path)
-
-        media.telegram_message_id = telegram_data.get("message_id")
-        media.telegram_file_id = telegram_data.get("file_id")
-        media.telegram_file_unique_id = telegram_data.get(
-            "file_unique_id"
-        )
-        media.telegram_thumbnail_file_id = telegram_data.get(
-            "thumbnail_file_id"
-        )
-
-        if media_width:
-            media.width = media_width
-        if media_height:
-            media.height = media_height
-        if media_duration:
-            media.duration = media_duration
+        _store_variant(storage, media, MediaVariant.PREVIEW, preview_path, "image/jpeg", *preview_dims)
+        _store_variant(storage, media, MediaVariant.STREAM, stream_path, "video/mp4", media.width, media.height)
 
         media.status = "completed"
+        media.upload_error = None
         media.processed_at = timezone.now()
+        media.temp_file_path = None
         media.save()
 
-        print(f"Media {media_id}: Telegram upload completed")
-
-        # Delete Blob after successful Telegram upload
         try:
             blob_storage.delete_file(blob_name)
-            print(f"Media {media_id}: Blob deleted")
-        except Exception as e:
-            print(
-                f"Media {media_id}: Failed to delete Blob: {e}"
-            )
+        except Exception as exc:
+            logger.warning("Media %s: failed to delete blob: %s", media_id, exc)
 
-        # Delete Celery local temporary file
+    except StorageError as exc:
+        _fail(media, str(exc))
+    except Exception as exc:
+        logger.exception("Media %s: upload attempt failed", media_id)
+        retry_after = getattr(exc, "retry_after", None) or getattr(exc, "seconds", None)
         try:
-            if local_temp_path and os.path.exists(local_temp_path):
-                os.remove(local_temp_path)
-        except Exception as e:
-            print(
-                f"Media {media_id}: Failed to remove local temp file: {e}"
-            )
-
-    except Exception as e:
-
-        print(f"Task failed for Media {media_id}: {e}")
-
-        # Clean local temporary file
-        try:
-            if local_temp_path and os.path.exists(local_temp_path):
-                os.remove(local_temp_path)
-        except Exception:
-            pass
-
-        try:
-            self.retry(exc=e)
-
+            raise self.retry(exc=exc, countdown=retry_after or 60 * (2 ** self.request.retries))
         except self.MaxRetriesExceededError:
+            _fail(media, str(exc) or exc.__class__.__name__)
+    finally:
+        processing.remove_quietly(local_path, *generated)
 
-            media.status = "failed"
-            media.upload_error = str(e)
-            media.save()
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=120)
+def delete_telegram_messages(self, message_ids):
+    try:
+        TelegramStorage().delete_messages(message_ids)
+    except Exception as exc:
+        raise self.retry(exc=exc)

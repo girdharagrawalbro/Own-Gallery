@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     Modal,
     StyleSheet,
@@ -15,29 +15,25 @@ import {
 import { Folder } from 'lucide-react-native';
 import { getAlbums, addMediaToAlbum } from '../../api/albums';
 import { Album } from '../../types/album';
-import AuthenticatedImage from '../../components/AuthenticatedImage';
+import RemoteImage from '../../components/RemoteImage';
 
 const { width } = Dimensions.get('window');
 const CELL = (width - 48) / 2;
 
 interface Props {
     visible: boolean;
-    mediaId: number | null;
+    mediaIds: number[];
     onClose: () => void;
+    /** Called after the media was added (before onClose). */
+    onAdded?: (album: Album) => void;
 }
 
-const SelectAlbumModal = ({ visible, mediaId, onClose }: Props) => {
+const SelectAlbumModal = ({ visible, mediaIds, onClose, onAdded }: Props) => {
     const [albums, setAlbums] = useState<Album[]>([]);
     const [loading, setLoading] = useState(false);
     const [adding, setAdding] = useState(false);
 
-    useEffect(() => {
-        if (visible) {
-            fetchAlbums();
-        }
-    }, [visible]);
-
-    const fetchAlbums = async () => {
+    const fetchAlbums = useCallback(async () => {
         setLoading(true);
         try {
             // Fetch first page, ideally we'd fetch all or paginate here if many albums
@@ -48,16 +44,24 @@ const SelectAlbumModal = ({ visible, mediaId, onClose }: Props) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        if (visible) {
+            fetchAlbums();
+        }
+    }, [visible, fetchAlbums]);
 
     const handleSelectAlbum = async (album: Album) => {
-        if (!mediaId) return;
+        if (mediaIds.length === 0) { return; }
         setAdding(true);
         try {
-            await addMediaToAlbum(album.id, [mediaId]);
-            ToastAndroid.show(`Added to ${album.name}`, ToastAndroid.SHORT);
+            await addMediaToAlbum(album.id, mediaIds);
+            const label = mediaIds.length === 1 ? '' : `${mediaIds.length} items `;
+            ToastAndroid.show(`Added ${label}to ${album.name}`, ToastAndroid.SHORT);
+            onAdded?.(album);
             onClose();
-        } catch (err) {
+        } catch {
             Alert.alert('Error', 'Failed to add media to album');
         } finally {
             setAdding(false);
@@ -72,7 +76,7 @@ const SelectAlbumModal = ({ visible, mediaId, onClose }: Props) => {
         >
             <View style={styles.coverContainer}>
                 {item.cover_url ? (
-                    <AuthenticatedImage uri={item.cover_url} style={styles.coverImage} resizeMode="cover" cacheOnDisk={true} />
+                    <RemoteImage uri={item.cover_url} style={styles.coverImage} />
                 ) : (
                     <View style={styles.placeholderCover}>
                         <Folder size={40} color="#ccc" />

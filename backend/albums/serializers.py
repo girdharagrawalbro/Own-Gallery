@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from media.signing import signed_path
+
 from .models import Album
 
 
@@ -17,12 +19,13 @@ class AlbumSerializer(serializers.ModelSerializer):
 
         cover = obj.cover_media
         if not cover:
-            cover = obj.media.filter(is_deleted=False).first()
+            cover = obj.media.filter(is_deleted=False).order_by("-taken_at").first()
 
-        if cover and cover.telegram_thumbnail_file_id:
-            return request.build_absolute_uri(f"/api/media/{cover.id}/thumbnail/")
-            
+        if cover:
+            return request.build_absolute_uri(signed_path(cover.id, "thumbnail"))
+
         return None
 
     def get_media_count(self, obj):
-        return obj.media.filter(is_deleted=False).count()
+        count = getattr(obj, "visible_media_count", None)
+        return count if count is not None else obj.media.filter(is_deleted=False).count()

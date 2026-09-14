@@ -1,151 +1,121 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { AxiosError } from 'axios';
 import { X } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { apiClient } from '../api/client';
+import { api, getErrorMessage } from '../api/client';
+import { useAuth } from '../context/auth';
+import Modal from './Modal';
 
 interface SettingsModalProps {
   onClose: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
-  const { user, token, login } = useAuth();
-  
+const SettingsModal = ({ onClose }: SettingsModalProps) => {
+  const { user, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
-  
-  const [firstName, setFirstName] = useState(user?.first_name || '');
-  const [lastName, setLastName] = useState(user?.last_name || '');
+
+  const [firstName, setFirstName] = useState(user?.first_name ?? '');
+  const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [profileMessage, setProfileMessage] = useState('');
-  
+  const [profileMessage, setProfileMessage] = useState<{ text: string; error: boolean } | null>(null);
+
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [passwordMessage, setPasswordMessage] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState<{ text: string; error: boolean } | null>(null);
 
-  const handleUpdateProfile = async (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: FormEvent) => {
     e.preventDefault();
     setIsSavingProfile(true);
-    setProfileMessage('');
+    setProfileMessage(null);
     try {
-      const response = await apiClient.put('/auth/me/', {
-        first_name: firstName,
-        last_name: lastName
-      });
-      if (token) {
-        login(token, response.data);
-      }
-      setProfileMessage('Profile updated successfully');
+      updateUser(await api.updateMe({ first_name: firstName, last_name: lastName }));
+      setProfileMessage({ text: 'Profile updated', error: false });
     } catch (err) {
-      console.error(err);
-      setProfileMessage('Failed to update profile');
+      setProfileMessage({ text: getErrorMessage(err, 'Failed to update profile'), error: true });
     } finally {
       setIsSavingProfile(false);
     }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
     setIsSavingPassword(true);
-    setPasswordMessage('');
-    setPasswordError('');
+    setPasswordMessage(null);
     try {
-      await apiClient.post('/auth/change-password/', {
-        old_password: oldPassword,
-        new_password: newPassword
-      });
-      setPasswordMessage('Password changed successfully');
+      await api.changePassword(oldPassword, newPassword);
+      setPasswordMessage({ text: 'Password changed', error: false });
       setOldPassword('');
       setNewPassword('');
-    } catch (err: any) {
-      console.error(err);
-      setPasswordError(err.response?.data?.old_password?.[0] || 'Failed to change password');
+    } catch (err) {
+      const data = err instanceof AxiosError ? (err.response?.data as Record<string, unknown> | undefined) : undefined;
+      const fieldError = Array.isArray(data?.old_password) ? String(data.old_password[0]) : null;
+      setPasswordMessage({ text: fieldError ?? getErrorMessage(err, 'Failed to change password'), error: true });
     } finally {
       setIsSavingPassword(false);
     }
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000
-    }}>
-      <div className="glass-panel animate-fade-in" style={{
-        width: '100%', maxWidth: '500px',
-        background: 'var(--bg-color)',
-        padding: 0, display: 'flex', flexDirection: 'column'
-      }}>
-        <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: '600' }}>Settings</h2>
-          <button className="btn-icon" onClick={onClose}><X size={20} /></button>
-        </div>
-        
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)' }}>
-          <button 
-            style={{ flex: 1, padding: '16px', fontWeight: '500', color: activeTab === 'profile' ? 'var(--accent-color)' : 'var(--text-secondary)', borderBottom: activeTab === 'profile' ? '2px solid var(--accent-color)' : '2px solid transparent' }}
-            onClick={() => setActiveTab('profile')}
-          >
-            Profile
-          </button>
-          <button 
-            style={{ flex: 1, padding: '16px', fontWeight: '500', color: activeTab === 'password' ? 'var(--accent-color)' : 'var(--text-secondary)', borderBottom: activeTab === 'password' ? '2px solid var(--accent-color)' : '2px solid transparent' }}
-            onClick={() => setActiveTab('password')}
-          >
-            Security
-          </button>
-        </div>
-        
-        <div style={{ padding: '24px' }}>
-          {activeTab === 'profile' && (
-            <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>Email</label>
-                <input className="input-field" type="email" value={user?.email || ''} disabled style={{ opacity: 0.7 }} />
-              </div>
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>First Name</label>
-                  <input className="input-field" type="text" value={firstName} onChange={e => setFirstName(e.target.value)} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>Last Name</label>
-                  <input className="input-field" type="text" value={lastName} onChange={e => setLastName(e.target.value)} />
-                </div>
-              </div>
-              
-              {profileMessage && <div style={{ color: 'var(--accent-color)', fontSize: '14px' }}>{profileMessage}</div>}
-              
-              <button type="submit" className="btn-primary" disabled={isSavingProfile} style={{ alignSelf: 'flex-start', marginTop: '8px' }}>
-                {isSavingProfile ? 'Saving...' : 'Save Profile'}
-              </button>
-            </form>
-          )}
-          
-          {activeTab === 'password' && (
-            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>Current Password</label>
-                <input className="input-field" type="password" required value={oldPassword} onChange={e => setOldPassword(e.target.value)} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary)' }}>New Password</label>
-                <input className="input-field" type="password" required minLength={8} value={newPassword} onChange={e => setNewPassword(e.target.value)} />
-              </div>
-              
-              {passwordError && <div style={{ color: 'var(--danger-color)', fontSize: '14px' }}>{passwordError}</div>}
-              {passwordMessage && <div style={{ color: 'var(--accent-color)', fontSize: '14px' }}>{passwordMessage}</div>}
-              
-              <button type="submit" className="btn-primary" disabled={isSavingPassword} style={{ alignSelf: 'flex-start', marginTop: '8px' }}>
-                {isSavingPassword ? 'Updating...' : 'Update Password'}
-              </button>
-            </form>
-          )}
-        </div>
+    <Modal onClose={onClose} labelledBy="settings-title" width={500}>
+      <div className="modal-header">
+        <h2 id="settings-title">Settings</h2>
+        <button className="btn-icon" onClick={onClose} aria-label="Close">
+          <X size={20} />
+        </button>
       </div>
-    </div>
+
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={activeTab === 'profile'} className={activeTab === 'profile' ? 'active' : ''} onClick={() => setActiveTab('profile')}>
+          Profile
+        </button>
+        <button role="tab" aria-selected={activeTab === 'password'} className={activeTab === 'password' ? 'active' : ''} onClick={() => setActiveTab('password')}>
+          Security
+        </button>
+      </div>
+
+      <div className="modal-body">
+        {activeTab === 'profile' && (
+          <form onSubmit={handleUpdateProfile} className="settings-form">
+            <label className="field">
+              <span>Email</span>
+              <input className="input-field" type="email" value={user?.email ?? ''} disabled />
+            </label>
+            <div className="field-row">
+              <label className="field">
+                <span>First name</span>
+                <input className="input-field" type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>Last name</span>
+                <input className="input-field" type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+              </label>
+            </div>
+            {profileMessage && <div className={profileMessage.error ? 'form-error' : 'form-success'}>{profileMessage.text}</div>}
+            <button type="submit" className="btn-primary align-start" disabled={isSavingProfile}>
+              {isSavingProfile ? 'Saving…' : 'Save profile'}
+            </button>
+          </form>
+        )}
+
+        {activeTab === 'password' && (
+          <form onSubmit={handleChangePassword} className="settings-form">
+            <label className="field">
+              <span>Current password</span>
+              <input className="input-field" type="password" required value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} autoComplete="current-password" />
+            </label>
+            <label className="field">
+              <span>New password</span>
+              <input className="input-field" type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+            </label>
+            {passwordMessage && <div className={passwordMessage.error ? 'form-error' : 'form-success'}>{passwordMessage.text}</div>}
+            <button type="submit" className="btn-primary align-start" disabled={isSavingPassword}>
+              {isSavingPassword ? 'Updating…' : 'Update password'}
+            </button>
+          </form>
+        )}
+      </div>
+    </Modal>
   );
 };
 

@@ -17,7 +17,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Folder, Plus, Search } from 'lucide-react-native';
-import AuthenticatedImage from '../../components/AuthenticatedImage';
+import RemoteImage from '../../components/RemoteImage';
 import { getAlbums, createAlbum, deleteAlbum, updateAlbum } from '../../api/albums';
 import { Album } from '../../types/album';
 
@@ -39,7 +39,7 @@ const AlbumsScreen = () => {
     const [renameAlbumName, setRenameAlbumName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
 
-    const fetchAlbumsList = async () => {
+    const fetchAlbumsList = useCallback(async () => {
         try {
             const data = await getAlbums(1, searchQuery);
             setAlbums(data.results);
@@ -49,19 +49,19 @@ const AlbumsScreen = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [searchQuery]);
 
     useEffect(() => {
         const timeout = setTimeout(() => {
             fetchAlbumsList();
         }, 300);
         return () => clearTimeout(timeout);
-    }, [searchQuery]);
+    }, [fetchAlbumsList]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         fetchAlbumsList();
-    }, [searchQuery]);
+    }, [fetchAlbumsList]);
 
     const handleCreateAlbum = async () => {
         if (!newAlbumName.trim()) return;
@@ -71,7 +71,7 @@ const AlbumsScreen = () => {
             setCreateModalVisible(false);
             setNewAlbumName('');
             onRefresh();
-        } catch (err) {
+        } catch {
             Alert.alert('Error', 'Failed to create album');
         }
     };
@@ -85,7 +85,7 @@ const AlbumsScreen = () => {
             setRenameAlbumId(null);
             setRenameAlbumName('');
             onRefresh();
-        } catch (err) {
+        } catch {
             Alert.alert('Error', 'Failed to rename album');
         }
     };
@@ -132,7 +132,7 @@ const AlbumsScreen = () => {
         >
             <View style={styles.coverContainer}>
                 {item.cover_url ? (
-                    <AuthenticatedImage uri={item.cover_url} style={styles.coverImage} resizeMode="cover" cacheOnDisk={true} />
+                    <RemoteImage uri={item.cover_url} style={styles.coverImage} />
                 ) : (
                     <View style={styles.placeholderCover}>
                         <Folder size={40} color="#ccc" />

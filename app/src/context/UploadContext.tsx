@@ -1,151 +1,322 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+    createContext,
+    ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { ToastAndroid } from 'react-native';
-import { getMediaStatus, uploadMedia, permanentDelete } from '../api/media';
+import { Asset } from 'react-native-image-picker';
+import { getMediaStatus, permanentDelete, uploadMedia, UploadProgressEvent } from '../api/media';
 import { addMediaToAlbum } from '../api/albums';
 import { Media } from '../types/media';
-import { Asset } from 'react-native-image-picker';
+
+const MAX_CONCURRENT_UPLOADS = 2;
+const POLL_INTERVAL_MS = 3000;
+
+export type UploadTaskStatus =
+    | 'queued'
+    | 'uploading'
+    | 'processing'
+    | 'completed'
+    | 'duplicate'
+    | 'failed';
 
 export interface UploadTask {
-    id: string; // The local URI serves as unique ID for the task
+    /** Unique per task, even if the same file is picked twice. */
+    id: string;
     fileName: string;
     uri: string;
+    mimeType: string;
+    timestamp?: string;
+    albumId?: number;
     progress: number;
-    status: 'uploading' | 'processing' | 'completed' | 'failed';
+    status: UploadTaskStatus;
     error?: string;
-    mediaId?: number; // Added once Django returns the Media object
+    /** Set once the server returns the Media object. */
+    mediaId?: number;
 }
 
-interface UploadContextType {
-    tasks: UploadTask[];
+export const isActiveUpload = (t: UploadTask) =>
+    t.status === 'queued' || t.status === 'uploading' || t.status === 'processing';
+
+export const isFinishedUpload = (t: UploadTask) =>
+    t.status === 'completed' || t.status === 'duplicate' || t.status === 'failed';
+
+interface UploadActions {
     uploadFiles: (assets: Asset[], albumId?: number) => void;
-    clearCompletedTasks: () => void;
+    retryTask: (taskId: string) => void;
+    retryAllFailed: () => void;
     cancelTask: (taskId: string) => void;
+    clearCompletedTasks: () => void;
+    /** Increments whenever an upload finishes successfully (use it to refresh lists). */
+    completedVersion: number;
 }
 
-const UploadContext = createContext<UploadContextType | undefined>(undefined);
+const UploadStateContext = createContext<UploadTask[] | undefined>(undefined);
+const UploadActionsContext = createContext<UploadActions | undefined>(undefined);
+
+let taskCounter = 0;
+const newTaskId = () => `${Date.now().toString(36)}-${(taskCounter++).toString(36)}`;
+
+const errorMessage = (err: any): string =>
+    err?.response?.data?.error ||
+    err?.response?.data?.detail ||
+    (err?.message === 'Network Error' ? 'Network error' : null) ||
+    'Upload failed';
 
 export const UploadProvider = ({ children }: { children: ReactNode }) => {
     const [tasks, setTasks] = useState<UploadTask[]>([]);
+    const [completedVersion, setCompletedVersion] = useState(0);
 
-    // Polling effect for processing tasks
-    useEffect(() => {
-        const processingTasks = tasks.filter(t => t.status === 'processing' && t.mediaId);
-        if (processingTasks.length === 0) return;
+    // Source of truth lives in a ref so async workers never read stale state.
+    const tasksRef = useRef<UploadTask[]>([]);
+    const queueRef = useRef<string[]>([]);
+    const activeCountRef = useRef(0);
+    const controllersRef = useRef(new Map<string, AbortController>());
+    const lastPercentRef = useRef(new Map<string, number>());
+    const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollInFlightRef = useRef(false);
+    const mountedRef = useRef(true);
 
-        const interval = setInterval(async () => {
-            setTasks(currentTasks => {
-                const nextTasks = [...currentTasks];
-                return nextTasks; // State update deferred to the async loop below
+    const commit = useCallback((updater: (prev: UploadTask[]) => UploadTask[]) => {
+        tasksRef.current = updater(tasksRef.current);
+        if (mountedRef.current) {
+            setTasks(tasksRef.current);
+        }
+    }, []);
+
+    const patchTask = useCallback((id: string, patch: Partial<UploadTask>) => {
+        commit(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)));
+    }, [commit]);
+
+    // ── Status polling: one interval, never overlapping, stops when idle ─────
+
+    const stopPolling = useCallback(() => {
+        if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+        }
+    }, []);
+
+    const applyServerStatus = useCallback((taskId: string, media: Media) => {
+        const task = tasksRef.current.find(t => t.id === taskId);
+        if (!task) { return; }
+        if (media.status === 'completed') {
+            patchTask(taskId, { status: 'completed', progress: 100, mediaId: media.id });
+            setCompletedVersion(v => v + 1);
+        } else if (media.status === 'duplicate') {
+            patchTask(taskId, { status: 'duplicate', progress: 100, mediaId: media.id });
+        } else if (media.status === 'failed') {
+            patchTask(taskId, {
+                status: 'failed',
+                mediaId: media.id,
+                error: media.upload_error || 'Processing failed on server',
             });
+            ToastAndroid.show(`${task.fileName} failed to process`, ToastAndroid.SHORT);
+        } else if (task.status !== 'processing' || task.mediaId !== media.id) {
+            patchTask(taskId, { status: 'processing', progress: 100, mediaId: media.id });
+        }
+    }, [patchTask]);
 
-            for (const task of processingTasks) {
+    const pollOnce = useCallback(async () => {
+        if (pollInFlightRef.current) { return; }
+        const processing = tasksRef.current.filter(t => t.status === 'processing' && t.mediaId);
+        if (processing.length === 0) {
+            stopPolling();
+            return;
+        }
+        pollInFlightRef.current = true;
+        try {
+            await Promise.all(processing.map(async task => {
                 try {
-                    const status = await getMediaStatus(task.mediaId!);
-                    setTasks(prev => prev.map(t => {
-                        if (t.id === task.id) {
-                            if (status.status === 'completed') {
-                                ToastAndroid.show(`${t.fileName} completed`, ToastAndroid.SHORT);
-                                return { ...t, status: 'completed' };
-                            } else if (status.status === 'failed') {
-                                ToastAndroid.show(`${t.fileName} failed to process`, ToastAndroid.SHORT);
-                                return { ...t, status: 'failed', error: 'Processing failed on server' };
-                            }
-                        }
-                        return t;
-                    }));
+                    const media = await getMediaStatus(task.mediaId!);
+                    applyServerStatus(task.id, media);
                 } catch (e) {
-                    console.error("Failed to poll status for", task.mediaId);
+                    console.log('Failed to poll status for', task.mediaId, e);
                 }
-            }
-        }, 3000);
-
-        return () => clearInterval(interval);
-    }, [tasks]);
-
-    const uploadFiles = async (assets: Asset[], albumId?: number) => {
-        // 1. Add all to queue
-        const newTasks: UploadTask[] = assets.map(asset => ({
-            id: asset.uri!,
-            uri: asset.uri!,
-            fileName: asset.fileName || 'Unnamed file',
-            progress: 0,
-            status: 'uploading',
-        }));
-
-        setTasks(prev => [...prev, ...newTasks]);
-
-        // 2. Process uploads (sequentially or in parallel, choosing sequential for stability)
-        for (const asset of assets) {
-            try {
-                const newMedia = await uploadMedia(
-                    asset.uri!,
-                    asset.fileName || 'upload',
-                    asset.type || 'application/octet-stream',
-                    (event: any) => {
-                        if (event.total) {
-                            const prog = Math.round((event.loaded * 100) / event.total);
-                            setTasks(prev => prev.map(t => 
-                                t.id === asset.uri ? { ...t, progress: prog } : t
-                            ));
-                        }
-                    },
-                    asset.timestamp
-                );
-
-                if (albumId && newMedia && newMedia.id) {
-                    await addMediaToAlbum(albumId, [newMedia.id]);
-                }
-                
-                if (newMedia) {
-                    setTasks(prev => prev.map(t => 
-                        t.id === asset.uri ? { 
-                            ...t, 
-                            status: newMedia.status === 'completed' ? 'completed' : 'processing', 
-                            mediaId: newMedia.id 
-                        } : t
-                    ));
-                }
-            } catch (err: any) {
-                console.log('Upload error for', asset.fileName, err);
-                setTasks(prev => prev.map(t => 
-                    t.id === asset.uri ? { ...t, status: 'failed', error: 'Upload failed' } : t
-                ));
-            }
+            }));
+        } finally {
+            pollInFlightRef.current = false;
         }
-    };
+    }, [applyServerStatus, stopPolling]);
 
-    const clearCompletedTasks = () => {
-        setTasks(prev => prev.filter(t => t.status !== 'completed' && t.status !== 'failed'));
-    };
+    const ensurePolling = useCallback(() => {
+        if (pollTimerRef.current) { return; }
+        pollTimerRef.current = setInterval(pollOnce, POLL_INTERVAL_MS);
+    }, [pollOnce]);
 
-    const cancelTask = async (taskId: string) => {
-        // Find the task before removing it to check if we need to delete it from server
-        const taskToCancel = tasks.find(t => t.id === taskId);
-        
-        // Remove it immediately from the UI
-        setTasks(prev => prev.filter(t => t.id !== taskId));
-        
-        if (taskToCancel && taskToCancel.mediaId && taskToCancel.status === 'processing') {
-            try {
-                await permanentDelete(taskToCancel.mediaId);
-                console.log(`Permanently deleted stuck media ${taskToCancel.mediaId}`);
-            } catch (err) {
-                console.error(`Failed to delete media ${taskToCancel.mediaId} on cancel`, err);
+    // ── Upload worker pool ───────────────────────────────────────────────────
+
+    const runTask = useCallback(async (taskId: string) => {
+        const task = tasksRef.current.find(t => t.id === taskId);
+        if (!task) { return; }
+
+        const controller = new AbortController();
+        controllersRef.current.set(taskId, controller);
+        lastPercentRef.current.set(taskId, 0);
+        patchTask(taskId, { status: 'uploading', progress: 0, error: undefined });
+
+        const onProgress = (event: UploadProgressEvent) => {
+            if (!event.total) { return; }
+            const percent = Math.min(99, Math.floor((event.loaded * 100) / event.total));
+            // Only re-render when the integer percentage changes.
+            if (lastPercentRef.current.get(taskId) === percent) { return; }
+            lastPercentRef.current.set(taskId, percent);
+            patchTask(taskId, { progress: percent });
+        };
+
+        try {
+            const media = await uploadMedia(
+                task.uri,
+                task.fileName,
+                task.mimeType,
+                onProgress,
+                task.timestamp,
+                controller.signal,
+            );
+
+            if (!tasksRef.current.some(t => t.id === taskId)) {
+                return; // cancelled while finishing
             }
+
+            if (task.albumId && media?.id && media.status !== 'failed' && media.status !== 'duplicate') {
+                try {
+                    await addMediaToAlbum(task.albumId, [media.id]);
+                } catch (e) {
+                    console.log('Failed to add uploaded media to album', e);
+                }
+            }
+
+            if (media.status === 'processing') {
+                patchTask(taskId, { status: 'processing', progress: 100, mediaId: media.id });
+                ensurePolling();
+            } else {
+                applyServerStatus(taskId, media);
+            }
+        } catch (err: any) {
+            if (controller.signal.aborted || err?.name === 'CanceledError') {
+                return;
+            }
+            console.log('Upload error for', task.fileName, err?.message);
+            patchTask(taskId, { status: 'failed', error: errorMessage(err) });
+        } finally {
+            controllersRef.current.delete(taskId);
+            lastPercentRef.current.delete(taskId);
         }
-    };
+    }, [applyServerStatus, ensurePolling, patchTask]);
+
+    const pump = useCallback(() => {
+        while (activeCountRef.current < MAX_CONCURRENT_UPLOADS && queueRef.current.length > 0) {
+            const nextId = queueRef.current.shift()!;
+            if (!tasksRef.current.some(t => t.id === nextId && t.status === 'queued')) {
+                continue;
+            }
+            activeCountRef.current += 1;
+            runTask(nextId).finally(() => {
+                activeCountRef.current -= 1;
+                pump();
+            });
+        }
+    }, [runTask]);
+
+    // ── Public actions ───────────────────────────────────────────────────────
+
+    const uploadFiles = useCallback((assets: Asset[], albumId?: number) => {
+        const newTasks: UploadTask[] = assets
+            .filter(a => !!a.uri)
+            .map(asset => ({
+                id: newTaskId(),
+                uri: asset.uri!,
+                fileName: asset.fileName || 'upload',
+                mimeType: asset.type || 'application/octet-stream',
+                timestamp: asset.timestamp,
+                albumId,
+                progress: 0,
+                status: 'queued' as const,
+            }));
+        if (newTasks.length === 0) { return; }
+
+        commit(prev => [...prev, ...newTasks]);
+        queueRef.current.push(...newTasks.map(t => t.id));
+        pump();
+    }, [commit, pump]);
+
+    const retryTask = useCallback((taskId: string) => {
+        const task = tasksRef.current.find(t => t.id === taskId);
+        if (!task || task.status !== 'failed') { return; }
+        patchTask(taskId, { status: 'queued', progress: 0, error: undefined, mediaId: undefined });
+        queueRef.current.push(taskId);
+        pump();
+    }, [patchTask, pump]);
+
+    const retryAllFailed = useCallback(() => {
+        tasksRef.current.filter(t => t.status === 'failed').forEach(t => retryTask(t.id));
+    }, [retryTask]);
+
+    const cancelTask = useCallback((taskId: string) => {
+        const task = tasksRef.current.find(t => t.id === taskId);
+        commit(prev => prev.filter(t => t.id !== taskId));
+        queueRef.current = queueRef.current.filter(id => id !== taskId);
+        controllersRef.current.get(taskId)?.abort();
+
+        if (task?.mediaId && task.status === 'processing') {
+            permanentDelete(task.mediaId).catch(err => {
+                console.error(`Failed to delete media ${task.mediaId} on cancel`, err);
+            });
+        }
+    }, [commit]);
+
+    const clearCompletedTasks = useCallback(() => {
+        commit(prev => prev.filter(t => !isFinishedUpload(t)));
+    }, [commit]);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        const controllers = controllersRef.current;
+        return () => {
+            mountedRef.current = false;
+            stopPolling();
+            controllers.forEach(c => c.abort());
+        };
+    }, [stopPolling]);
+
+    const actions = useMemo<UploadActions>(() => ({
+        uploadFiles,
+        retryTask,
+        retryAllFailed,
+        cancelTask,
+        clearCompletedTasks,
+        completedVersion,
+    }), [uploadFiles, retryTask, retryAllFailed, cancelTask, clearCompletedTasks, completedVersion]);
 
     return (
-        <UploadContext.Provider value={{ tasks, uploadFiles, clearCompletedTasks, cancelTask }}>
-            {children}
-        </UploadContext.Provider>
+        <UploadActionsContext.Provider value={actions}>
+            <UploadStateContext.Provider value={tasks}>
+                {children}
+            </UploadStateContext.Provider>
+        </UploadActionsContext.Provider>
     );
 };
 
-export const useUploads = () => {
-    const context = useContext(UploadContext);
+/** Actions only: does not re-render on upload progress. */
+export const useUploadActions = () => {
+    const context = useContext(UploadActionsContext);
     if (!context) {
-        throw new Error('useUploads must be used within an UploadProvider');
+        throw new Error('useUploadActions must be used within an UploadProvider');
     }
     return context;
+};
+
+/** Tasks + actions (re-renders on every progress change). */
+export const useUploads = () => {
+    const tasks = useContext(UploadStateContext);
+    const actions = useUploadActions();
+    if (!tasks) {
+        throw new Error('useUploads must be used within an UploadProvider');
+    }
+    return { tasks, ...actions };
 };

@@ -1,108 +1,103 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Dimensions,
-    FlatList,
-    Pressable,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    View,
-} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ImageOff, Heart } from 'lucide-react-native';
+import { Heart } from 'lucide-react-native';
 
-import AuthenticatedImage from '../../components/AuthenticatedImage';
-import VideoThumbnail from '../../components/VideoThumbnail';
+import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from '../Gallery/MediaViewer';
 import { getMedia } from '../../api/media';
 import { Media } from '../../types/media';
 
-const { width } = Dimensions.get('window');
-const CELL = (width - 4) / 3;
-
 const FavoritesScreen = () => {
-    const navigation = useNavigation();
     const insets = useSafeAreaInsets();
-    
+    const gridRef = useRef<MediaGridHandle>(null);
+
     const [media, setMedia] = useState<Media[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [page, setPage] = useState(1);
-    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
 
     const [viewerVisible, setViewerVisible] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
 
-    const fetchFavorites = async (pageNumber: number, isRefresh = false) => {
+    const pageRef = useRef(1);
+    const hasMoreRef = useRef(true);
+    const busyRef = useRef(false);
+    const hasLoadedRef = useRef(false);
+    const viewerOpenRef = useRef(false);
+
+    const fetchFavorites = useCallback(async (pageNumber: number) => {
+        if (pageNumber > 1 && busyRef.current) { return; }
+        busyRef.current = true;
+        if (pageNumber > 1) { setLoadingMore(true); }
         try {
-            const data = await getMedia(pageNumber, true);
-            if (isRefresh || pageNumber === 1) {
-                setMedia(data.results);
-            } else {
-                setMedia(prev => [...prev, ...data.results]);
-            }
-            setPage(pageNumber);
-            setHasMore(!!data.next);
+            const data = await getMedia({ page: pageNumber, isFavorite: true });
+            setMedia(prev => {
+                if (pageNumber === 1) { return data.results; }
+                const existing = new Set(prev.map(m => m.id));
+                return [...prev, ...data.results.filter(m => !existing.has(m.id))];
+            });
+            pageRef.current = pageNumber;
+            hasMoreRef.current = !!data.next;
+            hasLoadedRef.current = true;
         } catch (err) {
             console.log('Failed to fetch favorites', err);
         } finally {
+            busyRef.current = false;
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        fetchFavorites(1, true);
-    }, []);
+        fetchFavorites(1);
+    }, [fetchFavorites]);
+
+    // Favorites change from other tabs: refresh quietly when the tab regains focus.
+    useFocusEffect(useCallback(() => {
+        if (hasLoadedRef.current && !viewerOpenRef.current) {
+            fetchFavorites(1);
+        }
+    }, [fetchFavorites]));
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
-        fetchFavorites(1, true);
-    }, []);
+        fetchFavorites(1);
+    }, [fetchFavorites]);
 
     const onEndReached = useCallback(() => {
-        if (!loading && !refreshing && hasMore) {
-            fetchFavorites(page + 1);
+        if (hasMoreRef.current) {
+            fetchFavorites(pageRef.current + 1);
         }
-    }, [loading, refreshing, hasMore, page]);
+    }, [fetchFavorites]);
 
-    const openViewer = useCallback((index: number) => {
+    const openViewer = useCallback((_item: Media, index: number) => {
+        if (index < 0) { return; }
+        viewerOpenRef.current = true;
         setSelectedIndex(index);
         setViewerVisible(true);
     }, []);
 
-    const renderItem = useCallback(({ item, index }: { item: Media; index: number }) => (
-        <Pressable
-            style={styles.cell}
-            onPress={() => openViewer(index)}
-            android_ripple={{ color: 'rgba(255,255,255,0.3)' }}>
-            {item.media_type === 'video' ? (
-                <VideoThumbnail thumbnailUrl={item.thumbnail_url} duration={item.duration} />
-            ) : item.thumbnail_url ? (
-                <AuthenticatedImage uri={item.thumbnail_url} style={styles.cellImage} resizeMode="cover" cacheOnDisk={true} />
-            ) : (
-                <View style={styles.noThumb}><ImageOff size={24} color="#ccc" /></View>
-            )}
+    const handleViewerClose = useCallback((lastIndex: number) => {
+        viewerOpenRef.current = false;
+        setViewerVisible(false);
+        const last = media[lastIndex];
+        // Items un-favorited in the viewer are kept until it closes so pages don't shift.
+        setMedia(prev => prev.filter(m => m.is_favorite));
+        if (last?.is_favorite) {
+            requestAnimationFrame(() => gridRef.current?.scrollToMedia(last.id));
+        }
+    }, [media]);
 
-            {item.is_favorite && (
-                <View style={styles.favoriteBadge}>
-                    <Heart size={16} color="#FF3B30" fill="#FF3B30" />
-                </View>
-            )}
-        </Pressable>
-    ), [openViewer]);
+    const handleMediaUpdated = useCallback((updated: Media) => {
+        setMedia(prev => prev.map(m => (m.id === updated.id ? updated : m)));
+    }, []);
 
-    const keyExtractor = useCallback((item: Media) => item.id.toString(), []);
-
-    if (loading) {
-        return (
-            <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#1a73e8" />
-            </View>
-        );
-    }
+    const handleMediaDeleted = useCallback((deletedId: number) => {
+        setMedia(prev => prev.filter(m => m.id !== deletedId));
+    }, []);
 
     return (
         <View style={styles.container}>
@@ -110,44 +105,32 @@ const FavoritesScreen = () => {
                 <Text style={styles.heading}>Favorites</Text>
             </View>
 
-            <FlatList
-                data={media}
-                numColumns={3}
-                keyExtractor={keyExtractor}
-                renderItem={renderItem}
-                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a73e8" />}
+            <MediaGrid
+                ref={gridRef}
+                media={media}
+                showFavoriteBadge={false}
+                onPressItem={openViewer}
+                loading={loading}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
                 onEndReached={onEndReached}
-                onEndReachedThreshold={0.5}
+                loadingMore={loadingMore}
+                bottomPadding={insets.bottom + 100}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Heart size={64} color="#ccc" style={{ marginBottom: 16 }} />
+                        <Heart size={64} color="#ccc" style={styles.emptyIcon} />
                         <Text style={styles.emptyTitle}>No favorites yet</Text>
                     </View>
                 }
-                getItemLayout={(_, index) => ({
-                    length: CELL,
-                    offset: CELL * Math.floor(index / 3),
-                    index,
-                })}
             />
 
             <MediaViewer
                 visible={viewerVisible}
                 media={media}
                 initialIndex={selectedIndex}
-                onClose={() => {
-                    setViewerVisible(false);
-                    fetchFavorites(1, true); // Refresh in case they unfavorited
-                }}
-                onMediaUpdated={(updatedMedia) => {
-                    if (!updatedMedia.is_favorite) {
-                        setMedia(prev => prev.filter(m => m.id !== updatedMedia.id));
-                    }
-                }}
-                onMediaDeleted={(deletedId) => {
-                    setMedia(prev => prev.filter(m => m.id !== deletedId));
-                }}
+                onClose={handleViewerClose}
+                onMediaUpdated={handleMediaUpdated}
+                onMediaDeleted={handleMediaDeleted}
             />
         </View>
     );
@@ -157,22 +140,9 @@ export default FavoritesScreen;
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    
-    header: { paddingHorizontal: 16, paddingBottom: 16, backgroundColor: '#fff' },
+    header: { paddingHorizontal: 16, paddingBottom: 8, backgroundColor: '#fff' },
     heading: { fontSize: 28, fontWeight: '700', color: '#3c4043', letterSpacing: -0.5 },
-    
-    cell: { width: CELL, height: CELL, margin: 0.5, backgroundColor: '#f1f3f4', overflow: 'hidden' },
-    cellImage: { width: '100%', height: '100%' },
-    noThumb: { flex: 1, backgroundColor: '#f1f3f4', justifyContent: 'center', alignItems: 'center' },
-    
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
+    emptyIcon: { marginBottom: 16 },
     emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
-    
-    favoriteBadge: { 
-        position: 'absolute', 
-        top: 6, 
-        left: 6, 
-        padding: 4 
-    },
 });

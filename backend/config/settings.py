@@ -92,20 +92,36 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT"),
-        "CONN_MAX_AGE": 60,
-        "OPTIONS": {
-            "sslmode": "require",
-        },
+if os.getenv("DB_ENGINE", "postgresql") == "sqlite":
+    # Local development / test runs without Postgres.
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": os.getenv("SQLITE_PATH", BASE_DIR / "db.sqlite3"),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST"),
+            "PORT": os.getenv("DB_PORT"),
+            # Pooled connections: many gunicorn threads share a few Postgres
+            # connections instead of each holding one open.
+            "CONN_MAX_AGE": 0,
+            "OPTIONS": {
+                "sslmode": os.getenv("DB_SSLMODE", "require"),
+                "pool": {
+                    "min_size": int(os.getenv("DB_POOL_MIN", 1)),
+                    "max_size": int(os.getenv("DB_POOL_MAX", 8)),
+                    "timeout": 20,
+                },
+            },
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
@@ -150,22 +166,37 @@ CELERY_BROKER_URL = os.getenv(
     f"{REDIS_URL}/0"
 )
 CELERY_RESULT_BACKEND = os.getenv(
-    "CELERY_BROKER_URL",
+    "CELERY_RESULT_BACKEND",
     f"{REDIS_URL}/0"
 )
+CELERY_TASK_IGNORE_RESULT = True
+# One long upload shouldn't make the worker pre-reserve other users' uploads.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+# Large uploads/transcodes can run long; don't let Redis redeliver them mid-run.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 6 * 3600}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"{REDIS_URL}/1",
-    },
-    "file_cache": {
-        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
-        "LOCATION": os.path.join(BASE_DIR, "media_uploads", "file_cache"),
+if os.getenv("CACHE_BACKEND") == "locmem":
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        "file_cache": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "files"},
     }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": f"{REDIS_URL}/1",
+        },
+        # Local disk cache for preview images (per container, bounded).
+        "file_cache": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+            "LOCATION": os.path.join(BASE_DIR, "media_uploads", "file_cache"),
+            "TIMEOUT": 7 * 24 * 3600,
+            "OPTIONS": {"MAX_ENTRIES": int(os.getenv("FILE_CACHE_MAX_ENTRIES", 3000))},
+        },
+    }
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-fieldc-email-configuration
@@ -178,21 +209,41 @@ MAILERS = {
 
 AUTH_USER_MODEL = "accounts.User"
 
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", 60))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", 30))),
+}
+
+# Media delivery
+MEDIA_URL_SIGNING_KEY = os.getenv("MEDIA_URL_SIGNING_KEY") or SECRET_KEY
+# Signed media URLs rotate once per period and stay valid for one to two periods.
+MEDIA_URL_ROTATION_SECONDS = int(os.getenv("MEDIA_URL_ROTATION_SECONDS", 7 * 24 * 3600))
+UPLOAD_CHUNK_SIZE = int(os.getenv("UPLOAD_CHUNK_SIZE", 8 * 1024 * 1024))
+PREVIEW_MAX_SIDE = int(os.getenv("PREVIEW_MAX_SIDE", 1600))
+# "auto": remux/transcode videos that browsers can't stream well. "off": keep originals only.
+VIDEO_STREAM_VARIANTS = os.getenv("VIDEO_STREAM_VARIANTS", "auto")
+VIDEO_STREAM_MAX_HEIGHT = int(os.getenv("VIDEO_STREAM_MAX_HEIGHT", 1080))
+# HEVC plays on Safari/Android/most Chrome installs; transcoding it is CPU heavy.
+VIDEO_TRANSCODE_HEVC = os.getenv("VIDEO_TRANSCODE_HEVC", "False").lower() == "true"
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "accounts.authentication.QueryStringJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 30,
+    "PAGE_SIZE": 60,
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/day",
-        "user": "1000/hour",
-        "uploads": "60/minute",
+        "user": "5000/hour",
+        # Chunked uploads send many requests per file.
+        "uploads": "600/minute",
     },
 }
 

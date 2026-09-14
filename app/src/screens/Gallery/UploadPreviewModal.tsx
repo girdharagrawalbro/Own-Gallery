@@ -7,13 +7,10 @@ import {
     FlatList,
     Image,
     Pressable,
-    Dimensions,
 } from 'react-native';
 import { Asset, launchImageLibrary } from 'react-native-image-picker';
 import { Trash2, Plus } from 'lucide-react-native';
-import { useUploads } from '../../context/UploadContext';
-
-const { width } = Dimensions.get('window');
+import { useUploadActions } from '../../context/UploadContext';
 
 interface Props {
     visible: boolean;
@@ -24,7 +21,7 @@ interface Props {
 }
 
 const UploadPreviewModal = ({ visible, assets: initialAssets, albumId, onClose, onUploadComplete }: Props) => {
-    const { uploadFiles } = useUploads();
+    const { uploadFiles } = useUploadActions();
     const [localAssets, setLocalAssets] = useState<Asset[]>([]);
 
     useEffect(() => {
@@ -40,8 +37,8 @@ const UploadPreviewModal = ({ visible, assets: initialAssets, albumId, onClose, 
         onClose();
     };
 
-    const handleRemove = (uriToRemove: string) => {
-        setLocalAssets(prev => prev.filter(a => a.uri !== uriToRemove));
+    const handleRemove = (indexToRemove: number) => {
+        setLocalAssets(prev => prev.filter((_, i) => i !== indexToRemove));
     };
 
     const handleAddMore = async () => {
@@ -61,14 +58,14 @@ const UploadPreviewModal = ({ visible, assets: initialAssets, albumId, onClose, 
         }
     };
 
-    const renderItem = ({ item }: { item: Asset }) => {
+    const renderItem = ({ item, index }: { item: Asset; index: number }) => {
         return (
             <View style={styles.assetContainer}>
                 <Image source={{ uri: item.uri }} style={styles.thumbnail} />
                 <View style={styles.infoContainer}>
                     <Text style={styles.fileName} numberOfLines={1}>{item.fileName || 'Unnamed file'}</Text>
                 </View>
-                <Pressable onPress={() => handleRemove(item.uri!)} style={styles.removeBtn}>
+                <Pressable onPress={() => handleRemove(index)} style={styles.removeBtn}>
                     <Trash2 size={20} color="#ff3b30" />
                 </Pressable>
             </View>
@@ -94,7 +91,7 @@ const UploadPreviewModal = ({ visible, assets: initialAssets, albumId, onClose, 
 
                 <FlatList
                     data={localAssets}
-                    keyExtractor={item => item.uri!}
+                    keyExtractor={(item, index) => `${item.uri}-${index}`}
                     renderItem={renderItem}
                     contentContainerStyle={styles.listContent}
                     ListEmptyComponent={

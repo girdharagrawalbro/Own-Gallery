@@ -1,8 +1,29 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiClient } from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AxiosError } from 'axios';
 import { UserPlus } from 'lucide-react';
+import { api, getErrorMessage } from '../api/client';
+import { useAuth } from '../context/auth';
+
+function registrationError(err: unknown): string {
+  if (err instanceof AxiosError) {
+    const data = err.response?.data as Record<string, unknown> | undefined;
+    const first = (key: string) => {
+      const value = data?.[key];
+      return Array.isArray(value) && typeof value[0] === 'string' ? value[0] : null;
+    };
+    const invite = first('invite_code');
+    if (invite) return invite;
+    const username = first('username');
+    if (username) return `Username: ${username}`;
+    const email = first('email');
+    if (email) return `Email: ${email}`;
+    const password = first('password');
+    if (password) return `Password: ${password}`;
+  }
+  return getErrorMessage(err, 'Registration failed. Please check your inputs.');
+}
 
 const Register = () => {
   const [username, setUsername] = useState('');
@@ -14,94 +35,38 @@ const Register = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
     try {
-      // 1. Register User
-      await apiClient.post('/auth/register/', {
-        username,
-        email,
-        password,
-        invite_code: inviteCode
-      });
-
-      // 2. Automatically log in after registration
-      const response = await apiClient.post('/auth/login/', { username, password });
-      const accessToken = response.data.access;
-
-      if (!accessToken) {
-        throw new Error('No access token received');
-      }
-
-      // 3. Fetch User Profile
-      const meResponse = await apiClient.get('/auth/me/', {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-
-      // 4. Finalize Login
-      login(accessToken, meResponse.data);
-      navigate('/');
-    } catch (err: any) {
-      if (err.response?.data?.invite_code) {
-        setError(err.response.data.invite_code[0]);
-      } else if (err.response?.data?.username) {
-        setError('Username: ' + err.response.data.username[0]);
-      } else if (err.response?.data?.email) {
-        setError('Email: ' + err.response.data.email[0]);
-      } else {
-        setError(err.response?.data?.error || 'Registration failed. Please check your inputs.');
-      }
+      await api.register({ username, email, password, invite_code: inviteCode });
+      // Sign in straight away and keep both tokens.
+      const tokens = await api.login(username, password);
+      if (!tokens.access || !tokens.refresh) throw new Error('Login response did not include tokens');
+      const me = await api.me(tokens.access);
+      login(tokens, me);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(registrationError(err));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      padding: '20px'
-    }}>
-      <div className="glass-panel animate-fade-in" style={{
-        width: '100%',
-        maxWidth: '400px',
-        padding: '40px',
-        textAlign: 'center'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-          <div style={{
-            background: 'rgba(59, 130, 246, 0.2)',
-            padding: '16px',
-            borderRadius: '50%'
-          }}>
-            <UserPlus size={48} color="#007AFF" />
-          </div>
+    <div className="auth-page">
+      <div className="auth-card animate-fade-in">
+        <div className="auth-logo">
+          <UserPlus size={36} />
         </div>
+        <h1>Create account</h1>
+        <p className="auth-subtitle">Join the private gallery using your invite code.</p>
 
-        <h1 style={{ marginBottom: '8px', fontSize: '24px' }}>Create Account</h1>
-        <p style={{ marginBottom: '24px', fontSize: '14px', color: '#888' }}>
-          Join the private gallery using your invite code.
-        </p>
+        {error && <div className="form-error">{error}</div>}
 
-        {error && (
-          <div style={{
-            backgroundColor: 'rgba(255, 59, 48, 0.1)',
-            color: 'var(--danger-color)',
-            padding: '12px',
-            borderRadius: '8px',
-            marginBottom: '20px',
-            fontSize: '14px'
-          }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} className="auth-form">
           <input
             className="input-field"
             type="text"
@@ -110,50 +75,44 @@ const Register = () => {
             onChange={(e) => setUsername(e.target.value)}
             required
             autoCapitalize="none"
+            autoComplete="username"
           />
           <input
             className="input-field"
             type="email"
-            placeholder="Email Address"
+            placeholder="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoCapitalize="none"
+            autoComplete="email"
           />
           <input
             className="input-field"
             type="password"
-            placeholder="Password (min 8 chars)"
+            placeholder="Password (min 8 characters)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
+            autoComplete="new-password"
           />
           <input
             className="input-field"
             type="text"
-            placeholder="Secret Invite Code"
+            placeholder="Invite code"
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
             required
             autoCapitalize="none"
-            style={{ borderColor: 'rgba(59, 130, 246, 0.5)' }}
           />
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={isLoading}
-            style={{ marginTop: '8px', opacity: isLoading ? 0.7 : 1 }}
-          >
-            {isLoading ? 'Creating Account...' : 'Register'}
+          <button type="submit" className="btn-primary" disabled={isLoading}>
+            {isLoading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
 
-        <div style={{ marginTop: '24px', fontSize: '14px', color: '#888' }}>
-          Already have an account?{' '}
-          <a href="/login" style={{ color: '#007AFF', textDecoration: 'none', fontWeight: '500' }}>
-            Log in
-          </a>
+        <div className="auth-footer">
+          Already have an account? <Link to="/login">Sign in</Link>
         </div>
       </div>
     </div>

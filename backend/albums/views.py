@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from rest_framework import status, viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +18,8 @@ class AlbumViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Album.objects.filter(
             user=self.request.user
+        ).select_related("cover_media").annotate(
+            visible_media_count=Count("media", filter=Q(media__is_deleted=False), distinct=True)
         ).order_by('-created_at')
 
     def perform_create(self, serializer):
@@ -100,7 +103,7 @@ class AlbumViewSet(viewsets.ModelViewSet):
         media = album.media.filter(
             user=request.user,
             is_deleted=False
-        )
+        ).exclude(status="duplicate").order_by("-taken_at", "-created_at")
 
         serializer = self.get_serializer(
             album
