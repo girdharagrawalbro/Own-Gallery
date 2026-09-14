@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Modal,
     StyleSheet,
@@ -7,10 +7,10 @@ import {
     FlatList,
     Image,
     Pressable,
-    ActivityIndicator,
     Dimensions,
 } from 'react-native';
-import { Asset } from 'react-native-image-picker';
+import { Asset, launchImageLibrary } from 'react-native-image-picker';
+import { Trash2, Plus } from 'lucide-react-native';
 import { useUploads } from '../../context/UploadContext';
 
 const { width } = Dimensions.get('window');
@@ -23,13 +23,42 @@ interface Props {
     onUploadComplete: () => void;
 }
 
-const UploadPreviewModal = ({ visible, assets, albumId, onClose, onUploadComplete }: Props) => {
+const UploadPreviewModal = ({ visible, assets: initialAssets, albumId, onClose, onUploadComplete }: Props) => {
     const { uploadFiles } = useUploads();
+    const [localAssets, setLocalAssets] = useState<Asset[]>([]);
+
+    useEffect(() => {
+        if (visible) {
+            setLocalAssets(initialAssets);
+        }
+    }, [visible, initialAssets]);
 
     const handleUpload = async () => {
-        uploadFiles(assets, albumId);
+        if (localAssets.length === 0) return;
+        uploadFiles(localAssets, albumId);
         onUploadComplete();
         onClose();
+    };
+
+    const handleRemove = (uriToRemove: string) => {
+        setLocalAssets(prev => prev.filter(a => a.uri !== uriToRemove));
+    };
+
+    const handleAddMore = async () => {
+        const result = await launchImageLibrary({
+            mediaType: 'mixed',
+            selectionLimit: 0,
+            includeExtra: true,
+        });
+
+        if (result.assets && result.assets.length > 0) {
+            setLocalAssets(prev => {
+                const newAssets = result.assets || [];
+                const existingUris = new Set(prev.map(a => a.uri));
+                const uniqueNewAssets = newAssets.filter(a => !existingUris.has(a.uri));
+                return [...prev, ...uniqueNewAssets];
+            });
+        }
     };
 
     const renderItem = ({ item }: { item: Asset }) => {
@@ -39,6 +68,9 @@ const UploadPreviewModal = ({ visible, assets, albumId, onClose, onUploadComplet
                 <View style={styles.infoContainer}>
                     <Text style={styles.fileName} numberOfLines={1}>{item.fileName || 'Unnamed file'}</Text>
                 </View>
+                <Pressable onPress={() => handleRemove(item.uri!)} style={styles.removeBtn}>
+                    <Trash2 size={20} color="#ff3b30" />
+                </Pressable>
             </View>
         );
     };
@@ -47,23 +79,36 @@ const UploadPreviewModal = ({ visible, assets, albumId, onClose, onUploadComplet
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <View style={styles.container}>
                 <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Upload {assets.length} items</Text>
-                    <Pressable onPress={onClose} style={styles.closeBtn}>
-                        <Text style={styles.closeBtnText}>Cancel</Text>
-                    </Pressable>
+                    <View style={styles.headerLeft}>
+                        <Text style={styles.headerTitle}>Upload {localAssets.length} items</Text>
+                    </View>
+                    <View style={styles.headerRight}>
+                        <Pressable onPress={handleAddMore} style={styles.addMoreBtn}>
+                            <Plus size={20} color="#007AFF" />
+                        </Pressable>
+                        <Pressable onPress={onClose} style={styles.closeBtn}>
+                            <Text style={styles.closeBtnText}>Cancel</Text>
+                        </Pressable>
+                    </View>
                 </View>
 
                 <FlatList
-                    data={assets}
+                    data={localAssets}
                     keyExtractor={item => item.uri!}
                     renderItem={renderItem}
                     contentContainerStyle={styles.listContent}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Text style={styles.emptyText}>No items selected.</Text>
+                        </View>
+                    }
                 />
 
                 <View style={styles.footer}>
                     <Pressable 
-                        style={styles.uploadBtn} 
+                        style={[styles.uploadBtn, localAssets.length === 0 && styles.uploadBtnDisabled]} 
                         onPress={handleUpload}
+                        disabled={localAssets.length === 0}
                     >
                         <Text style={styles.uploadBtnText}>Upload All</Text>
                     </Pressable>
@@ -88,10 +133,23 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
     },
+    headerLeft: {
+        flex: 1,
+    },
     headerTitle: {
         fontSize: 18,
         fontWeight: 'bold',
         color: '#111',
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    addMoreBtn: {
+        padding: 8,
+        marginRight: 8,
+        backgroundColor: '#f0f8ff',
+        borderRadius: 8,
     },
     closeBtn: {
         padding: 8,
@@ -99,9 +157,6 @@ const styles = StyleSheet.create({
     closeBtnText: {
         fontSize: 16,
         color: '#007AFF',
-    },
-    disabledText: {
-        color: '#999',
     },
     listContent: {
         padding: 16,
@@ -129,21 +184,17 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
         color: '#333',
-        marginBottom: 8,
     },
-    progressContainer: {
-        height: 4,
-        backgroundColor: '#eee',
-        borderRadius: 2,
-        overflow: 'hidden',
+    removeBtn: {
+        padding: 12,
     },
-    progressBar: {
-        height: '100%',
-        backgroundColor: '#007AFF',
+    emptyContainer: {
+        paddingVertical: 40,
+        alignItems: 'center',
     },
-    errorText: {
-        fontSize: 12,
-        color: '#ff3b30',
+    emptyText: {
+        color: '#999',
+        fontSize: 16,
     },
     footer: {
         padding: 16,

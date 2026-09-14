@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Pressable, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { useUploads } from '../context/UploadContext';
 import UploadStatusModal from '../screens/Gallery/UploadStatusModal';
 
@@ -11,26 +11,12 @@ const UploadBanner = () => {
     
     if (activeTasks.length === 0) return null;
 
-    const uploadingCount = activeTasks.filter(t => t.status === 'uploading').length;
-    const processingCount = activeTasks.filter(t => t.status === 'processing').length;
-
-    let bannerText = '';
-    if (uploadingCount > 0 && processingCount > 0) {
-        bannerText = `Uploading ${uploadingCount}, Processing ${processingCount}...`;
-    } else if (uploadingCount > 0) {
-        bannerText = `Uploading ${uploadingCount} item${uploadingCount > 1 ? 's' : ''}...`;
-    } else if (processingCount > 0) {
-        bannerText = `Processing ${processingCount} item${processingCount > 1 ? 's' : ''}...`;
-    }
-
     return (
         <>
-            <SafeAreaView style={styles.safeArea}>
-                <Pressable style={styles.container} onPress={() => setModalVisible(true)}>
-                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
-                    <Text style={styles.text}>{bannerText}</Text>
-                </Pressable>
-            </SafeAreaView>
+            <Pressable style={styles.fabBanner} onPress={() => setModalVisible(true)}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.countText}>{activeTasks.length}</Text>
+            </Pressable>
             
             <UploadStatusModal 
                 visible={modalVisible} 
@@ -41,20 +27,29 @@ const UploadBanner = () => {
 };
 
 const styles = StyleSheet.create({
-    safeArea: {
-        backgroundColor: '#007AFF',
-    },
-    container: {
-        backgroundColor: '#007AFF',
-        padding: 10,
-        flexDirection: 'row',
+    fabBanner: {
+        position: 'absolute',
+        bottom: 90,
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 16,
+        backgroundColor: '#1a73e8', // Google Blue to match Gallery FAB
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
+        zIndex: 1000,
     },
-    text: {
+    countText: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: 'bold',
+        marginTop: 2,
     }
 });
 

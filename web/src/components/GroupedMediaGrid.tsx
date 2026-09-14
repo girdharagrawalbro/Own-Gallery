@@ -102,7 +102,7 @@ const GroupedMediaGrid: React.FC<GroupedMediaGridProps> = ({
                   }}
                 >
                   <AuthenticatedImage
-                    src={item.thumbnail_url || item.content_url}
+                    src={item.thumbnail_url || (item.media_type === 'video' ? '' : item.content_url)}
                     alt={item.filename}
                     style={{ 
                       width: '100%', height: '100%', objectFit: 'cover',

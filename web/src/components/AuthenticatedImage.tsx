@@ -15,6 +15,10 @@ const AuthenticatedImage: React.FC<AuthenticatedImageProps> = ({ src, style, ...
     let isMounted = true;
 
     const fetchImage = async () => {
+      if (!src) {
+        if (isMounted) setError(true);
+        return;
+      }
       try {
         const response = await apiClient.get(src, { responseType: 'blob' });
         const blob = response.data;

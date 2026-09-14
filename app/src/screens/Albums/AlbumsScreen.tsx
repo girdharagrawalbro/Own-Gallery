@@ -199,6 +199,7 @@ const AlbumsScreen = () => {
                             value={newAlbumName}
                             onChangeText={setNewAlbumName}
                             autoFocus
+                            placeholderTextColor={'#777'}
                         />
                         <View style={styles.modalActions}>
                             <Pressable style={styles.modalBtn} onPress={() => setCreateModalVisible(false)}>
@@ -243,7 +244,7 @@ export default AlbumsScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
     centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-    
+
     searchContainer: {
         paddingHorizontal: 16,
         paddingBottom: 16,
@@ -274,27 +275,27 @@ const styles = StyleSheet.create({
     placeholderCover: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     albumName: { fontSize: 16, fontWeight: '500', color: '#3c4043' },
     mediaCount: { fontSize: 13, color: '#5f6368', marginTop: 4 },
-    
-    fab: { 
-        position: 'absolute', 
-        right: 20, 
-        width: 56, 
-        height: 56, 
-        borderRadius: 16, 
+
+    fab: {
+        position: 'absolute',
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 16,
         backgroundColor: '#1a73e8', // Google Blue
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        elevation: 6, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: 3 }, 
-        shadowOpacity: 0.25, 
-        shadowRadius: 5 
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5
     },
-    
+
     emptyState: { alignItems: 'center', paddingTop: 100 },
     emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
     emptySubtitle: { fontSize: 15, color: '#5f6368', textAlign: 'center' },
-    
+
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
     modalContent: { width: '80%', backgroundColor: '#fff', borderRadius: 16, padding: 24 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#3c4043' },

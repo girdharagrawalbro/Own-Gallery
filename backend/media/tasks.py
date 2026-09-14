@@ -59,40 +59,6 @@ def upload_media_to_telegram(self, media_id):
 
         telegram_service = TelegramStorageService()
 
-        class LocalFileWrapper:
-
-            def __init__(self, file_path, content_type):
-                self.file_path = file_path
-                self.content_type = content_type
-
-            def read(self):
-                with open(self.file_path, "rb") as f:
-                    return f.read()
-
-            def chunks(self):
-                with open(self.file_path, "rb") as f:
-                    while chunk := f.read(8192):
-                        yield chunk
-
-            @property
-            def size(self):
-                return os.path.getsize(self.file_path)
-
-            @property
-            def name(self):
-                return os.path.basename(self.file_path)
-
-            def seek(self, offset):
-                pass
-
-            def close(self):
-                pass
-
-        file_obj = LocalFileWrapper(
-            local_temp_path,
-            media.mime_type,
-        )
-
         print(f"Media {media_id}: uploading to Telegram")
 
         thumbnail_obj = None
@@ -166,9 +132,10 @@ def upload_media_to_telegram(self, media_id):
                 print(f"Media {media_id}: Exception during metadata/thumbnail extraction: {e}")
 
         try:
-            telegram_data = asyncio.run(
-                telegram_service.upload_media(file_obj, thumbnail=thumbnail_obj)
-            )
+            with open(local_temp_path, "rb") as file_obj:
+                telegram_data = asyncio.run(
+                    telegram_service.upload_media(file_obj, thumbnail=thumbnail_obj, media_type=media.media_type)
+                )
         finally:
             if thumbnail_obj:
                 thumbnail_obj.close()
