@@ -209,6 +209,19 @@ MAILERS = {
 
 AUTH_USER_MODEL = "accounts.User"
 
+# Send errors (including 500 tracebacks) and app INFO logs to stdout so container logs show them.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"stdout": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "loggers": {
+        "django.request": {"handlers": ["stdout"], "level": "ERROR", "propagate": False},
+        "media": {"handlers": ["stdout"], "level": os.getenv("APP_LOG_LEVEL", "INFO"), "propagate": False},
+        "telegram_storage": {"handlers": ["stdout"], "level": os.getenv("APP_LOG_LEVEL", "INFO"), "propagate": False},
+    },
+}
+
 from datetime import timedelta
 
 SIMPLE_JWT = {

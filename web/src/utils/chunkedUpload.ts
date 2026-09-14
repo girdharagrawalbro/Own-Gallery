@@ -4,8 +4,9 @@ import type { Media } from '../types/media';
 
 export const MAX_ATTEMPTS = 4;
 const BASE_BACKOFF_MS = 1000;
-const POLL_INTERVAL_MS = 3000;
-const MAX_CONSECUTIVE_POLL_ERRORS = 20;
+const POLL_MIN_INTERVAL_MS = 2000;
+const POLL_MAX_INTERVAL_MS = 15000;
+const MAX_CONSECUTIVE_POLL_ERRORS = 10;
 
 const EXTENSION_MIME: Record<string, string> = {
   heic: 'image/heic',
@@ -166,19 +167,101 @@ export async function uploadFileChunked(file: File, hooks: ChunkedUploadHooks): 
   }
 }
 
-/** Poll GET /media/{id}/ until processing finishes. Transient errors are tolerated. */
-export async function pollUntilProcessed(mediaId: number, signal: AbortSignal): Promise<Media> {
-  let consecutiveErrors = 0;
-  for (;;) {
-    await sleep(POLL_INTERVAL_MS, signal);
-    try {
-      const media = await api.getMedia(mediaId, signal);
-      consecutiveErrors = 0;
-      if (media.status !== 'processing') return media;
-    } catch (err) {
-      if (signal.aborted || isCancellation(err)) throw new UploadCancelledError();
-      if (err instanceof AxiosError && err.response?.status === 404) throw err;
-      if (++consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) throw err;
+interface PendingPoll {
+  resolve: (media: Media) => void;
+  reject: (err: unknown) => void;
+}
+
+/**
+ * One shared poller for every processing upload: a single `/media/status/?ids=` request per tick
+ * instead of one request per file, with the interval backing off while nothing changes.
+ */
+const pendingPolls = new Map<number, Set<PendingPoll>>();
+let pollTimer: number | null = null;
+let pollDelay = POLL_MIN_INTERVAL_MS;
+let pollErrors = 0;
+
+function schedulePoll(delay: number) {
+  if (pollTimer !== null) window.clearTimeout(pollTimer);
+  pollTimer = window.setTimeout(runPoll, delay);
+}
+
+async function runPoll() {
+  pollTimer = null;
+  if (pendingPolls.size === 0) return;
+  if (document.hidden) {
+    // Don't poll from a background tab; resume as soon as it's visible again.
+    document.addEventListener('visibilitychange', () => schedulePoll(0), { once: true });
+    return;
+  }
+
+  const ids = [...pendingPolls.keys()];
+  let changed = false;
+  try {
+    const results = await api.mediaStatus(ids);
+    pollErrors = 0;
+    const byId = new Map(results.map((m) => [m.id, m]));
+    for (const id of ids) {
+      const media = byId.get(id);
+      const waiters = pendingPolls.get(id);
+      if (!waiters) continue;
+      if (!media) {
+        // Deleted while processing.
+        pendingPolls.delete(id);
+        changed = true;
+        waiters.forEach((w) => w.reject(new Error('This item was removed while processing')));
+      } else if (media.status !== 'processing') {
+        pendingPolls.delete(id);
+        changed = true;
+        waiters.forEach((w) => w.resolve(media));
+      }
+    }
+  } catch (err) {
+    if (++pollErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+      const all = [...pendingPolls.values()];
+      pendingPolls.clear();
+      pollErrors = 0;
+      all.forEach((waiters) => waiters.forEach((w) => w.reject(err)));
+      return;
     }
   }
+
+  if (pendingPolls.size === 0) return;
+  pollDelay = changed ? POLL_MIN_INTERVAL_MS : Math.min(Math.round(pollDelay * 1.5), POLL_MAX_INTERVAL_MS);
+  schedulePoll(pollDelay);
+}
+
+/** Resolve once the server finishes processing this media item. Transient errors are tolerated. */
+export function pollUntilProcessed(mediaId: number, signal: AbortSignal): Promise<Media> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new UploadCancelledError());
+      return;
+    }
+    const waiter: PendingPoll = {
+      resolve: (media) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(media);
+      },
+      reject: (err) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    };
+    const onAbort = () => {
+      const waiters = pendingPolls.get(mediaId);
+      waiters?.delete(waiter);
+      if (waiters && waiters.size === 0) pendingPolls.delete(mediaId);
+      reject(new UploadCancelledError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    const waiters = pendingPolls.get(mediaId) ?? new Set<PendingPoll>();
+    waiters.add(waiter);
+    pendingPolls.set(mediaId, waiters);
+
+    // A new item restarts the fast cadence; the first check waits briefly since images finish quickly.
+    pollDelay = POLL_MIN_INTERVAL_MS;
+    if (pollTimer === null) schedulePoll(POLL_MIN_INTERVAL_MS);
+  });
 }

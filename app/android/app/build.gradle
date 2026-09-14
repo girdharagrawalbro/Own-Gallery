@@ -111,6 +111,10 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
+    // Auto Backup: scheduled background uploads through WorkManager (no foreground service)
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("com.squareup.okhttp3:okhttp:4.9.2")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

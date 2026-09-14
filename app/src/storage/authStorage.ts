@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearAutoBackupAuth, syncAutoBackupAuth } from '../services/AutoBackupService';
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -16,6 +17,9 @@ export const saveTokens = async (
     REFRESH_TOKEN_KEY,
     refreshToken,
   );
+
+  // Auto Backup runs natively and needs its own copy of the credentials.
+  syncAutoBackupAuth(accessToken, refreshToken);
 };
 
 export const saveAccessToken = async (
@@ -25,6 +29,8 @@ export const saveAccessToken = async (
     ACCESS_TOKEN_KEY,
     accessToken,
   );
+
+  syncAutoBackupAuth(accessToken, await AsyncStorage.getItem(REFRESH_TOKEN_KEY));
 };
 
 export const getAccessToken = async () => {
@@ -47,4 +53,6 @@ export const clearTokens = async () => {
   await AsyncStorage.removeItem(
     REFRESH_TOKEN_KEY,
   );
+
+  await clearAutoBackupAuth().catch(() => undefined);
 };

@@ -253,3 +253,20 @@ class MediaApiTests(TestCase):
             response = self.client.delete(f"/api/media/{media.id}/permanent-delete/")
         self.assertEqual(response.status_code, 204)
         delete_task.delay.assert_called_once_with([11, 12])
+
+    def test_status_batch_returns_only_own_items(self):
+        mine = self.make(status="processing")
+        done = self.make(status="completed")
+        other_user = User.objects.create_user(username="u9", email="u9@example.com", password="pw")
+        foreign = Media.objects.create(user=other_user, media_type="image", filename="z.jpg", file_size=1)
+        response = self.client.get(f"/api/media/status/?ids={mine.id},{done.id},{foreign.id},abc")
+        statuses = {m["id"]: m["status"] for m in response.json()["results"]}
+        self.assertEqual(statuses, {mine.id: "processing", done.id: "completed"})
+
+    def test_check_hashes(self):
+        self.make(file_hash="a" * 64, status="completed")
+        self.make(file_hash="b" * 64, status="failed")
+        response = self.client.post("/api/media/check-hashes/", {"hashes": ["A" * 64, "b" * 64, "c" * 64]},
+                                    format="json")
+        self.assertEqual(response.json()["existing"], ["a" * 64])
+

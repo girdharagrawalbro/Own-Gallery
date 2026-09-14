@@ -1,7 +1,8 @@
 import { api } from './client';
 import { PaginatedMedia, Media } from '../types/media';
 import RNFS from 'react-native-fs';
-import { Platform } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
+import NativeMediaSync from '../native/NativeMediaSync';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 
 export const DEFAULT_PAGE_SIZE = 90;
@@ -89,6 +90,60 @@ export const createShareLink = async (id: number): Promise<string> => {
 export const getMediaStatus = async (id: number): Promise<Media> => {
   const response = await api.get<Media>(`/media/${id}/`);
   return response.data;
+};
+
+/** Current state of several uploads in one request. */
+export const getMediaStatuses = async (ids: number[]): Promise<Media[]> => {
+  const response = await api.get<{ results: Media[] }>('/media/status/', { params: { ids: ids.join(',') } });
+  return response.data.results;
+};
+
+/** Resumable chunked upload streamed natively (Android). Same protocol as the web app. */
+export const isChunkedUploadAvailable = Platform.OS === 'android' && NativeMediaSync != null;
+
+export class UploadCancelledError extends Error {
+  constructor() {
+    super('Upload cancelled');
+    this.name = 'UploadCancelledError';
+  }
+}
+
+let chunkedTaskCounter = 0;
+
+export const uploadMediaChunked = async (
+  uri: string,
+  fileName: string,
+  mimeType: string,
+  onUploadProgress?: (progressEvent: UploadProgressEvent) => void,
+  timestamp?: string,
+  signal?: AbortSignal,
+): Promise<Media> => {
+  if (!NativeMediaSync) throw new Error('Chunked upload is not available');
+  const taskId = `upload-${Date.now().toString(36)}-${(chunkedTaskCounter++).toString(36)}`;
+  const subscription = DeviceEventEmitter.addListener(
+    'OwnGalleryUploadProgress',
+    (event: { taskId: string; loaded: number; total: number }) => {
+      if (event.taskId === taskId) onUploadProgress?.({ loaded: event.loaded, total: event.total });
+    },
+  );
+  const onAbort = () => NativeMediaSync?.cancelUpload(taskId);
+  signal?.addEventListener('abort', onAbort);
+  try {
+    const json = await NativeMediaSync.uploadFile(
+      taskId,
+      uri,
+      fileName,
+      mimeType,
+      timestamp && timestamp !== 'undefined' && timestamp !== 'null' ? timestamp : '',
+    );
+    return JSON.parse(json) as Media;
+  } catch (err: any) {
+    if (signal?.aborted || err?.code === 'UPLOAD_CANCELLED') throw new UploadCancelledError();
+    throw err;
+  } finally {
+    subscription.remove();
+    signal?.removeEventListener('abort', onAbort);
+  }
 };
 
 export const getStats = async (): Promise<{total_items: number, total_size: number}> => {

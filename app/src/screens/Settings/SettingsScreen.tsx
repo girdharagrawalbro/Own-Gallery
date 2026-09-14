@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,23 @@ import {
   TextInput,
   Pressable,
   ToastAndroid,
-  ActivityIndicator
+  ActivityIndicator,
+  AppState,
+  Linking,
 } from 'react-native';
 import RNFS from 'react-native-fs';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile, changePassword } from '../../api/auth';
 import { getStats } from '../../api/media';
 import { formatBytes } from '../../utils/format';
+import {
+  type BackupStatus,
+  getAutoBackupStatus,
+  isAutoBackupAvailable,
+  requestMediaAccess,
+  runAutoBackupNow,
+  updateAutoBackupSettings,
+} from '../../services/AutoBackupService';
 import { ChevronRight, LogOut, User, Lock, Edit3 } from 'lucide-react-native';
 
 // Thumbnails/previews are cached natively (Fresco / RCTImageLoader) and videos/shares
@@ -39,6 +48,21 @@ const walkCache = async (dir: string, onFile: (file: RNFS.ReadDirItem) => Promis
       await onFile(entry);
     }
   }
+};
+
+const describeBackup = (status: BackupStatus | null): string => {
+  if (!isAutoBackupAvailable) return 'Available on Android';
+  if (!status) return 'Loading…';
+  if (!status.enabled) return 'Off';
+  if (!status.signedIn) return 'Sign in to back up';
+  if (!status.permissionGranted) return 'Allow photo access to back up';
+  if (status.state === 'running') return 'Backing up…';
+  if (status.lastResult === 'error' && status.lastError) return `Will retry: ${status.lastError}`;
+  if (status.lastResult === 'paused' && status.lastError) return `Paused: ${status.lastError}`;
+  if (status.lastSuccessAt > 0) {
+    return `Up to date · ${new Date(status.lastSuccessAt).toLocaleString()}`;
+  }
+  return status.wifiOnly ? 'On · runs when connected to Wi-Fi' : 'On · waiting to run';
 };
 
 const SettingsScreen = () => {
@@ -61,38 +85,86 @@ const SettingsScreen = () => {
   const [stats, setStats] = useState<{ total_items: number, total_size: number } | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
-  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
-  const [wifiOnly, setWifiOnly] = useState(true);
+  // Auto Backup settings live natively (WorkManager + SharedPreferences); this screen only
+  // reads and changes them.
+  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+
+  const refreshBackupStatus = useCallback(async () => {
+    try {
+      setBackupStatus(await getAutoBackupStatus());
+    } catch (e) {
+      console.log('Failed to read auto backup status', e);
+    }
+  }, []);
 
   React.useEffect(() => {
     calculateCacheSize();
     fetchStats();
-    checkAutoBackup();
   }, []);
 
-  const checkAutoBackup = async () => {
-    const BackgroundActions = require('react-native-background-actions').default;
-    setAutoBackupEnabled(BackgroundActions.isRunning());
-    
-    const wifiOnlyStr = await AsyncStorage.getItem('@backup_wifi_only');
-    setWifiOnly(wifiOnlyStr !== 'false'); // Default to true if not set
-  };
+  useEffect(() => {
+    if (!isAutoBackupAvailable) return;
+    refreshBackupStatus();
+    const timer = setInterval(refreshBackupStatus, 5000);
+    // Permissions may have changed in system settings while the app was in the background.
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') refreshBackupStatus();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [refreshBackupStatus]);
 
-  const toggleAutoBackup = async (val: boolean) => {
-    const { startAutoBackup, stopAutoBackup } = require('../../services/AutoBackupService');
-    setAutoBackupEnabled(val);
-    if (val) {
-      await startAutoBackup();
-      ToastAndroid.show("Auto-Backup Started", ToastAndroid.SHORT);
-    } else {
-      await stopAutoBackup();
-      ToastAndroid.show("Auto-Backup Stopped", ToastAndroid.SHORT);
+  const changeBackupSettings = async (change: Partial<Pick<BackupStatus, 'enabled' | 'wifiOnly' | 'chargingOnly'>>) => {
+    if (!backupStatus || backupBusy) return;
+    const next = {
+      enabled: change.enabled ?? backupStatus.enabled,
+      wifiOnly: change.wifiOnly ?? backupStatus.wifiOnly,
+      chargingOnly: change.chargingOnly ?? backupStatus.chargingOnly,
+    };
+
+    if (next.enabled && !backupStatus.enabled) {
+      const access = await requestMediaAccess();
+      if (access === 'denied') {
+        Alert.alert(
+          'Photo access needed',
+          'Allow Own Gallery to access photos and videos so it can back them up.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open settings', onPress: () => Linking.openSettings() },
+          ],
+        );
+        return;
+      }
+      if (access === 'partial') {
+        ToastAndroid.show('Only the photos you selected will be backed up', ToastAndroid.LONG);
+      }
+    }
+
+    setBackupBusy(true);
+    setBackupStatus({ ...backupStatus, ...next });
+    try {
+      await updateAutoBackupSettings(next);
+      if (change.enabled !== undefined) {
+        ToastAndroid.show(next.enabled ? 'Auto Backup on' : 'Auto Backup off', ToastAndroid.SHORT);
+      }
+    } catch (e: any) {
+      Alert.alert('Auto Backup', e?.message || 'Could not update backup settings');
+    } finally {
+      setBackupBusy(false);
+      refreshBackupStatus();
     }
   };
 
-  const toggleWifiOnly = async (val: boolean) => {
-    setWifiOnly(val);
-    await AsyncStorage.setItem('@backup_wifi_only', val.toString());
+  const backUpNow = async () => {
+    try {
+      await runAutoBackupNow();
+      ToastAndroid.show('Backup will start when conditions allow', ToastAndroid.SHORT);
+    } finally {
+      refreshBackupStatus();
+    }
   };
 
   const fetchStats = async () => {
@@ -277,27 +349,49 @@ const SettingsScreen = () => {
           <Text style={styles.sectionHeader}>AUTO BACKUP</Text>
           <View style={styles.card}>
             <View style={styles.row}>
-              <View>
-                <Text style={styles.rowText}>Auto-sync Camera Roll</Text>
-                <Text style={styles.subText}>Uploads photos in background</Text>
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText}>Back up photos & videos</Text>
+                <Text style={styles.subText}>{describeBackup(backupStatus)}</Text>
+                {backupStatus?.enabled && backupStatus.backedUpCount > 0 && (
+                  <Text style={styles.subText}>{backupStatus.backedUpCount} items backed up from this device</Text>
+                )}
               </View>
               <Switch
-                value={autoBackupEnabled}
-                onValueChange={toggleAutoBackup}
+                value={backupStatus?.enabled ?? false}
+                onValueChange={value => changeBackupSettings({ enabled: value })}
+                disabled={!backupStatus || backupBusy}
                 trackColor={{ false: '#767577', true: '#34C759' }}
               />
             </View>
-            <View style={[styles.row, styles.noBorder]}>
-              <View>
-                <Text style={styles.rowText}>Wi-Fi Only</Text>
-                <Text style={styles.subText}>Save cellular data</Text>
+            <View style={styles.row}>
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText}>Wi-Fi only</Text>
+                <Text style={styles.subText}>Don't use mobile data for backup</Text>
               </View>
               <Switch
-                value={wifiOnly}
-                onValueChange={toggleWifiOnly}
+                value={backupStatus?.wifiOnly ?? true}
+                onValueChange={value => changeBackupSettings({ wifiOnly: value })}
+                disabled={!backupStatus || backupBusy}
                 trackColor={{ false: '#767577', true: '#34C759' }}
               />
             </View>
+            <View style={[styles.row, !backupStatus?.enabled && styles.noBorder]}>
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText}>Only while charging</Text>
+                <Text style={styles.subText}>Back up when the phone is plugged in</Text>
+              </View>
+              <Switch
+                value={backupStatus?.chargingOnly ?? false}
+                onValueChange={value => changeBackupSettings({ chargingOnly: value })}
+                disabled={!backupStatus || backupBusy}
+                trackColor={{ false: '#767577', true: '#34C759' }}
+              />
+            </View>
+            {backupStatus?.enabled && (
+              <TouchableOpacity style={[styles.row, styles.noBorder]} onPress={backUpNow}>
+                <Text style={[styles.rowText, { color: '#1a73e8' }]}>Back up now</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -427,6 +521,7 @@ const SettingsScreen = () => {
 export default SettingsScreen;
 
 const styles = StyleSheet.create({
+  rowTextBlock: { flex: 1, marginRight: 12 },
   container: { flex: 1, backgroundColor: '#f2f2f7' },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 24, color: '#000' },

@@ -8,6 +8,16 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { UploadProvider } from './src/context/UploadContext';
 import UploadBanner from './src/components/UploadBanner';
 import ShareReceiver from './src/components/ShareReceiver';
+import { API_BASE_URL } from './src/api/client';
+import { getAccessToken, getRefreshToken } from './src/storage/authStorage';
+import { configureAutoBackup, syncAutoBackupAuth } from './src/services/AutoBackupService';
+
+// Give the native Auto Backup worker the API address and the current session
+// (covers users who were already signed in before Auto Backup existed).
+configureAutoBackup(API_BASE_URL);
+Promise.all([getAccessToken(), getRefreshToken()])
+  .then(([access, refresh]) => syncAutoBackupAuth(access, refresh))
+  .catch(() => undefined);
 
 const AppContent = () => {
   const { isAuthenticated, isLoading } = useAuth();

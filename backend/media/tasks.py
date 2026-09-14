@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import time
 
 from celery import shared_task
 from django.utils import timezone
@@ -72,13 +73,24 @@ def upload_media_to_telegram(self, media_id):
         _fail(media, "Temporary upload file not found.")
         return
 
+    started = time.monotonic()
+    timings = {}
+    logger.info("Media %s: attempt %d started, %.1fs after upload", media_id, self.request.retries + 1,
+                (timezone.now() - media.updated_at).total_seconds())
+
     storage = TelegramStorage()
     blob_storage = BlobStorageService()
     local_path = processing.temp_path(os.path.splitext(media.filename)[1], f"media_{media.id}_")
     generated = []
 
+    def mark(step, since):
+        timings[step] = round(time.monotonic() - since, 2)
+        return time.monotonic()
+
     try:
+        step = time.monotonic()
         blob_storage.download_file(blob_name, local_path)
+        step = mark("download", step)
         size = os.path.getsize(local_path)
         media.file_size = size
 
@@ -106,6 +118,7 @@ def upload_media_to_telegram(self, media_id):
                 "TELEGRAM_API_HASH to enable uploads up to 2 GB."
             )
 
+        step = mark("hash", step)
         thumbnail_path = preview_path = stream_path = None
         preview_dims = (None, None)
 
@@ -134,6 +147,7 @@ def upload_media_to_telegram(self, media_id):
             except Exception as exc:
                 logger.warning("Media %s: video processing failed: %s", media_id, exc)
 
+        step = mark("process", step)
         if not media.telegram_message_id:
             stored = storage.upload(local_path, media.filename, media.mime_type, size, thumbnail_path)
             media.telegram_message_id = stored["message_id"]
@@ -142,14 +156,19 @@ def upload_media_to_telegram(self, media_id):
             media.telegram_thumbnail_file_id = stored["thumbnail_file_id"]
             media.save()
 
+        step = mark("telegram_original", step)
         _store_variant(storage, media, MediaVariant.PREVIEW, preview_path, "image/jpeg", *preview_dims)
         _store_variant(storage, media, MediaVariant.STREAM, stream_path, "video/mp4", media.width, media.height)
+        mark("telegram_variants", step)
 
         media.status = "completed"
         media.upload_error = None
         media.processed_at = timezone.now()
         media.temp_file_path = None
         media.save()
+
+        logger.info("Media %s: completed in %.1fs %s (%s MB, mtproto=%s)", media_id, time.monotonic() - started,
+                    timings, round(size / 1048576, 1), storage.uses_mtproto)
 
         try:
             blob_storage.delete_file(blob_name)
@@ -159,7 +178,8 @@ def upload_media_to_telegram(self, media_id):
     except StorageError as exc:
         _fail(media, str(exc))
     except Exception as exc:
-        logger.exception("Media %s: upload attempt failed", media_id)
+        logger.exception("Media %s: attempt %d failed after %.1fs %s", media_id, self.request.retries + 1,
+                         time.monotonic() - started, timings)
         retry_after = getattr(exc, "retry_after", None) or getattr(exc, "seconds", None)
         try:
             raise self.retry(exc=exc, countdown=retry_after or 60 * (2 ** self.request.retries))

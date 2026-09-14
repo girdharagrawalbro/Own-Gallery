@@ -174,6 +174,11 @@ export const api = {
     apiClient.get<{ months: TimelineMonth[] }>('/media/timeline/', { params: filters }).then((r) => r.data.months),
   getMedia: (id: number, signal?: AbortSignal) =>
     apiClient.get<Media>(`/media/${id}/`, { signal }).then((r) => r.data),
+  /** Current state of several uploads in one request (used while they process). */
+  mediaStatus: (ids: number[]) =>
+    apiClient
+      .get<{ results: Media[] }>('/media/status/', { params: { ids: ids.join(',') } })
+      .then((r) => r.data.results),
   listTrash: () => apiClient.get<Media[]>('/media/trash/').then((r) => r.data),
 
   // Media mutations

@@ -388,6 +388,26 @@ class MediaViewSet(viewsets.ModelViewSet):
         )
         return Response({"total_items": totals["total_items"], "total_size": totals["total_size"] or 0})
 
+    @action(detail=False, methods=["get"], url_path="status")
+    def status_batch(self, request):
+        """Upload progress for many items in one request: ?ids=1,2,3 (max 200)."""
+        ids = [int(part) for part in request.query_params.get("ids", "").split(",") if part.strip().isdigit()][:200]
+        queryset = Media.objects.filter(user=request.user, id__in=ids)
+        return Response({"results": self.get_serializer(queryset, many=True).data})
+
+    @action(detail=False, methods=["post"], url_path="check-hashes")
+    def check_hashes(self, request):
+        """Which of these SHA-256 hashes are already stored (lets clients skip re-uploading)."""
+        hashes = request.data.get("hashes", [])
+        if not isinstance(hashes, list) or len(hashes) > 500:
+            return Response({"error": "hashes must be a list of at most 500 items."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        wanted = {str(h).lower() for h in hashes if isinstance(h, str) and len(h) == 64}
+        existing = Media.objects.filter(
+            user=request.user, file_hash__in=wanted, status__in=["processing", "completed"]
+        ).values_list("file_hash", flat=True)
+        return Response({"existing": sorted(set(existing))})
+
     # -- mutations -----------------------------------------------------------------
 
     @action(detail=True, methods=["post"], url_path="favorite")

@@ -11,12 +11,15 @@ private event loop thread and sync callers hop onto it.
 
 import asyncio
 import hashlib
+import logging
 import os
 import threading
 import time
 from collections import OrderedDict
 
 from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
 
 MTPROTO_UPLOAD_LIMIT = 2000 * 1024 * 1024
 CHUNK_SIZE = 512 * 1024  # Telethon's maximum request size
@@ -83,9 +86,12 @@ class MTProtoClient:
             # Reuse one bot authorization across processes/restarts: logging in
             # again on every boot quickly hits Telegram's flood limits.
             session = cache.get(self.session_cache_key) or os.getenv("TELEGRAM_MTPROTO_SESSION", "")
+            started = time.monotonic()
             new_session = self._run(self._start(session), timeout=90)
             if new_session:
                 cache.set(self.session_cache_key, new_session, timeout=None)
+            logger.info("MTProto connected in %.1fs (pid %s, %s)", time.monotonic() - started, os.getpid(),
+                        "new bot login" if new_session else "reused session")
 
     async def _start(self, session):
         from telethon import TelegramClient

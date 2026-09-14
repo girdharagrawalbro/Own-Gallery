@@ -10,12 +10,22 @@ import React, {
 } from 'react';
 import { ToastAndroid } from 'react-native';
 import { Asset } from 'react-native-image-picker';
-import { getMediaStatus, permanentDelete, uploadMedia, UploadProgressEvent } from '../api/media';
+import {
+    getMediaStatuses,
+    isChunkedUploadAvailable,
+    permanentDelete,
+    uploadMedia,
+    uploadMediaChunked,
+    UploadCancelledError,
+    UploadProgressEvent,
+} from '../api/media';
 import { addMediaToAlbum } from '../api/albums';
 import { Media } from '../types/media';
 
 const MAX_CONCURRENT_UPLOADS = 2;
-const POLL_INTERVAL_MS = 3000;
+// Processing status is polled for all uploads in one request, backing off while nothing changes.
+const POLL_MIN_INTERVAL_MS = 2000;
+const POLL_MAX_INTERVAL_MS = 15000;
 
 export type UploadTaskStatus =
     | 'queued'
@@ -63,6 +73,7 @@ let taskCounter = 0;
 const newTaskId = () => `${Date.now().toString(36)}-${(taskCounter++).toString(36)}`;
 
 const errorMessage = (err: any): string =>
+    (err?.code && err?.message && err.code !== 'UPLOAD_FAILED' ? err.message : null) ||
     err?.response?.data?.error ||
     err?.response?.data?.detail ||
     (err?.message === 'Network Error' ? 'Network error' : null) ||
@@ -78,7 +89,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     const activeCountRef = useRef(0);
     const controllersRef = useRef(new Map<string, AbortController>());
     const lastPercentRef = useRef(new Map<string, number>());
-    const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pollDelayRef = useRef(POLL_MIN_INTERVAL_MS);
     const pollInFlightRef = useRef(false);
     const mountedRef = useRef(true);
 
@@ -97,7 +109,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
 
     const stopPolling = useCallback(() => {
         if (pollTimerRef.current) {
-            clearInterval(pollTimerRef.current);
+            clearTimeout(pollTimerRef.current);
             pollTimerRef.current = null;
         }
     }, []);
@@ -122,32 +134,54 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [patchTask]);
 
-    const pollOnce = useCallback(async () => {
-        if (pollInFlightRef.current) { return; }
+    const pollOnce = useCallback(async (): Promise<boolean> => {
         const processing = tasksRef.current.filter(t => t.status === 'processing' && t.mediaId);
-        if (processing.length === 0) {
-            stopPolling();
-            return;
-        }
-        pollInFlightRef.current = true;
+        if (processing.length === 0) { return false; }
+        let changed = false;
         try {
-            await Promise.all(processing.map(async task => {
-                try {
-                    const media = await getMediaStatus(task.mediaId!);
+            const results = await getMediaStatuses(processing.map(t => t.mediaId!));
+            const byId = new Map(results.map(m => [m.id, m]));
+            for (const task of processing) {
+                const media = byId.get(task.mediaId!);
+                if (media && media.status !== 'processing') {
                     applyServerStatus(task.id, media);
-                } catch (e) {
-                    console.log('Failed to poll status for', task.mediaId, e);
+                    changed = true;
                 }
-            }));
-        } finally {
-            pollInFlightRef.current = false;
+            }
+        } catch (e) {
+            console.log('Failed to poll upload status', e);
         }
-    }, [applyServerStatus, stopPolling]);
+        return changed;
+    }, [applyServerStatus]);
+
+    const schedulePoll = useCallback((delay: number) => {
+        stopPolling();
+        pollTimerRef.current = setTimeout(async () => {
+            pollTimerRef.current = null;
+            if (pollInFlightRef.current) { return; }
+            pollInFlightRef.current = true;
+            let changed = false;
+            try {
+                changed = await pollOnce();
+            } finally {
+                pollInFlightRef.current = false;
+            }
+            if (!mountedRef.current) { return; }
+            if (!tasksRef.current.some(t => t.status === 'processing' && t.mediaId)) { return; }
+            pollDelayRef.current = changed
+                ? POLL_MIN_INTERVAL_MS
+                : Math.min(Math.round(pollDelayRef.current * 1.5), POLL_MAX_INTERVAL_MS);
+            schedulePoll(pollDelayRef.current);
+        }, delay);
+    }, [pollOnce, stopPolling]);
 
     const ensurePolling = useCallback(() => {
-        if (pollTimerRef.current) { return; }
-        pollTimerRef.current = setInterval(pollOnce, POLL_INTERVAL_MS);
-    }, [pollOnce]);
+        // A new processing item restarts the fast cadence.
+        pollDelayRef.current = POLL_MIN_INTERVAL_MS;
+        if (!pollTimerRef.current && !pollInFlightRef.current) {
+            schedulePoll(POLL_MIN_INTERVAL_MS);
+        }
+    }, [schedulePoll]);
 
     // ── Upload worker pool ───────────────────────────────────────────────────
 
@@ -170,7 +204,8 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
         };
 
         try {
-            const media = await uploadMedia(
+            const upload = isChunkedUploadAvailable ? uploadMediaChunked : uploadMedia;
+            const media = await upload(
                 task.uri,
                 task.fileName,
                 task.mimeType,
@@ -198,7 +233,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
                 applyServerStatus(taskId, media);
             }
         } catch (err: any) {
-            if (controller.signal.aborted || err?.name === 'CanceledError') {
+            if (controller.signal.aborted || err?.name === 'CanceledError' || err instanceof UploadCancelledError) {
                 return;
             }
             console.log('Upload error for', task.fileName, err?.message);
