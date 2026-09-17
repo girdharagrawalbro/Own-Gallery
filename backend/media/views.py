@@ -33,7 +33,7 @@ from .models import Media, MediaVariant, SharedLink
 from .serializers import MediaSerializer
 from .signing import SignedMediaAuthentication, SignedMediaGrant
 from .streaming import bytes_response, ranged_response
-from .tasks import apply_taken_at, delete_telegram_messages, upload_media_to_telegram
+from .tasks import apply_taken_at, delete_telegram_messages, requeue_stalled, upload_media_to_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -393,6 +393,11 @@ class MediaViewSet(viewsets.ModelViewSet):
         """Upload progress for many items in one request: ?ids=1,2,3 (max 200)."""
         ids = [int(part) for part in request.query_params.get("ids", "").split(",") if part.strip().isdigit()][:200]
         queryset = Media.objects.filter(user=request.user, id__in=ids)
+        try:
+            # Clients poll this while waiting, so it doubles as the recovery path for lost tasks.
+            requeue_stalled(queryset)
+        except Exception:
+            logger.exception("Could not requeue stalled uploads")
         return Response({"results": self.get_serializer(queryset, many=True).data})
 
     @action(detail=False, methods=["post"], url_path="check-hashes")

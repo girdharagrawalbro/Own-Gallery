@@ -29,8 +29,9 @@ export interface MediaCollection {
   trash: (ids: number[]) => Promise<boolean>;
 }
 
-const PROCESSING_POLL_MS = 5000;
-const MAX_POLLED = 20;
+const PROCESSING_POLL_MIN_MS = 5000;
+const PROCESSING_POLL_MAX_MS = 60000;
+const MAX_POLLED = 200; // server cap for /media/status/
 
 function insertSorted(list: Media[], additions: Media[]): Media[] {
   if (additions.length === 0) return list;
@@ -90,7 +91,8 @@ export function useMediaCollection(fetchPage: PageFetcher): MediaCollection {
     void loadMore();
   }, [loadMore]);
 
-  // Keep items that are still processing up to date.
+  // Keep items that are still processing up to date: one batched request per tick, backing off
+  // while nothing changes (items stuck on the server would otherwise be polled forever).
   const processingKey = useMemo(
     () =>
       items
@@ -103,15 +105,47 @@ export function useMediaCollection(fetchPage: PageFetcher): MediaCollection {
   useEffect(() => {
     if (!processingKey) return;
     const ids = processingKey.split(',').map(Number);
-    const timer = window.setInterval(async () => {
-      const updates = await Promise.all(ids.map((id) => api.getMedia(id).catch(() => null)));
-      const changed = updates.filter((m): m is Media => m !== null && m.status !== 'processing');
-      if (changed.length === 0) return;
-      const dropped = new Set(changed.filter((m) => m.status === 'duplicate').map((m) => m.id));
-      const byId = new Map(changed.map((m) => [m.id, m]));
-      setItems((prev) => prev.filter((m) => !dropped.has(m.id)).map((m) => byId.get(m.id) ?? m));
-    }, PROCESSING_POLL_MS);
-    return () => window.clearInterval(timer);
+    let delay = PROCESSING_POLL_MIN_MS;
+    let timer: number | undefined;
+    let cancelled = false;
+
+    const tick = async () => {
+      if (document.hidden) {
+        document.addEventListener('visibilitychange', schedule, { once: true });
+        return;
+      }
+      let results: Media[] | null = null;
+      try {
+        results = await api.mediaStatus(ids);
+      } catch {
+        // Transient; try again after the backoff.
+      }
+      if (cancelled) return;
+      if (results) {
+        const byId = new Map(results.map((m) => [m.id, m]));
+        const gone = new Set(ids.filter((id) => !byId.has(id) || byId.get(id)!.status === 'duplicate'));
+        const changed = results.filter((m) => m.status !== 'processing' && !gone.has(m.id));
+        if (gone.size > 0 || changed.length > 0) {
+          const updates = new Map(changed.map((m) => [m.id, m]));
+          // Changing items changes processingKey, which restarts this effect at the fast cadence.
+          setItems((prev) => prev.filter((m) => !gone.has(m.id)).map((m) => updates.get(m.id) ?? m));
+          return;
+        }
+      }
+      delay = Math.min(delay * 2, PROCESSING_POLL_MAX_MS);
+      schedule();
+    };
+
+    function schedule() {
+      if (!cancelled) timer = window.setTimeout(tick, delay);
+    }
+
+    schedule();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', schedule);
+    };
   }, [processingKey]);
 
   const upsert = useCallback((media: Media) => {

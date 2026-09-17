@@ -8,6 +8,7 @@ import {
 } from '../storage/authStorage';
 
 export const API_BASE_URL = 'https://own-gallery-api.ambitioushill-a50180b1.koreacentral.azurecontainerapps.io/api';
+// export const API_BASE_URL = 'http://192.168.1.71:8000/api'; // LAN IP — works from Android
 
 let onAuthFailure: (() => void) | null = null;
 

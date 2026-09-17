@@ -11,13 +11,14 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Always load .env relative to this file, regardless of working directory
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", 500 * 1024 * 1024)) # 500MB default
 
-from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -173,8 +174,19 @@ CELERY_TASK_IGNORE_RESULT = True
 # One long upload shouldn't make the worker pre-reserve other users' uploads.
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_ACKS_LATE = True
-# Large uploads/transcodes can run long; don't let Redis redeliver them mid-run.
-CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 6 * 3600}
+# On every broker reconnect the worker discards reserved/ETA messages and Redis only redelivers
+# them after visibility_timeout, so keep it short. A redelivery of a task that is still running
+# is harmless: upload_media_to_telegram holds a per-item lock and skips duplicates.
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", 20 * 60)),
+    "socket_keepalive": True,
+    "health_check_interval": 25,
+    "retry_on_timeout": True,
+}
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# Remote control opens an idle pub/sub connection that the Azure Container Apps TCP proxy cuts
+# every ~5 minutes, restarting the consumer each time. Opt back in with CELERY_REMOTE_CONTROL=True.
+CELERY_WORKER_ENABLE_REMOTE_CONTROL = os.getenv("CELERY_REMOTE_CONTROL", "False").lower() == "true"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 

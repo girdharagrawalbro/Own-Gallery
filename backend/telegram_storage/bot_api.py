@@ -7,8 +7,11 @@ Hard limits of the public Bot API: uploads <= 50 MB, downloads (getFile) <= 20 M
 Bigger files need the MTProto backend (see mtproto.py).
 """
 
+import logging
 import os
 import threading
+
+logger = logging.getLogger(__name__)
 
 import httpx
 from django.core.cache import cache
@@ -66,23 +69,34 @@ class BotApiClient:
             raise ValueError("TELEGRAM_BOT_TOKEN is not configured")
 
     def _call(self, method, data=None, files=None):
+        logger.debug("[BOT_API] Calling method=%s data=%s has_files=%s",
+                     method, {k: v for k, v in (data or {}).items() if k != "chat_id"}, bool(files))
         response = _http().post(
             f"{self.base_url}/bot{self.token}/{method}", data=data, files=files
         )
+        logger.debug("[BOT_API] Response method=%s status=%d", method, response.status_code)
         try:
             payload = response.json()
         except ValueError:
+            logger.error("[BOT_API] method=%s HTTP %d non-JSON response", method, response.status_code)
             raise TelegramApiError(f"{method}: HTTP {response.status_code}", response.status_code)
         if not payload.get("ok"):
             params = payload.get("parameters") or {}
+            logger.error("[BOT_API] method=%s FAILED error_code=%s description=%r retry_after=%s",
+                         method, payload.get("error_code"),
+                         payload.get("description"), params.get("retry_after"))
             raise TelegramApiError(
                 payload.get("description", f"{method} failed"),
                 payload.get("error_code"),
                 params.get("retry_after"),
             )
+        logger.debug("[BOT_API] method=%s OK", method)
         return payload["result"]
 
     def send_document(self, path, filename, mime_type, thumbnail_path=None):
+        file_size = os.path.getsize(path)
+        logger.info("[BOT_API] send_document file=%r mime=%s size=%d thumbnail=%s channel=%s",
+                    filename, mime_type, file_size, thumbnail_path, self.channel_id)
         with open(path, "rb") as document:
             files = {"document": (filename, document, mime_type or "application/octet-stream")}
             thumb = open(thumbnail_path, "rb") if thumbnail_path else None
