@@ -567,8 +567,45 @@ button:disabled {
 }
 
 /* ------------------------------------------------------------------ */
+/* Sort toggle                                                         */
+/* ------------------------------------------------------------------ */
+
+.sort-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 12px 0 4px;
+}
+
+.sort-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.sort-toggle-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.sort-toggle-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* Timeline grid                                                       */
 /* ------------------------------------------------------------------ */
+
 
 .timeline {
   position: relative;

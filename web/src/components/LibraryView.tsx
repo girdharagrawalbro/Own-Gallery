@@ -20,12 +20,14 @@ interface LibraryViewProps {
   gridFilter?: (item: Media) => boolean;
   /** Extra actions for the selection bar (e.g. "Remove from album"). */
   renderExtraActions?: (ids: number[], clearSelection: () => void) => ReactNode;
+  /** Date extractor for day-grouping headers. Defaults to photo date. */
+  dateOf?: (m: Media) => Date;
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** Timeline grid + selection bar + viewer, shared by Photos, Favorites, Search and albums. */
-const LibraryView = ({ collection, empty, header, gridFilter, renderExtraActions }: LibraryViewProps) => {
+const LibraryView = ({ collection, empty, header, gridFilter, renderExtraActions, dateOf }: LibraryViewProps) => {
   const { items } = collection;
   const [selected, setSelected] = useState<ReadonlySet<number>>(() => new Set());
   const [viewerId, setViewerId] = useState<number | null>(null);
@@ -94,6 +96,7 @@ const LibraryView = ({ collection, empty, header, gridFilter, renderExtraActions
         onSelectedChange={setSelected}
         onOpen={openViewer}
         empty={empty}
+        dateOf={dateOf}
       />
 
       <SelectionBar count={selected.size} onClear={clearSelection}>

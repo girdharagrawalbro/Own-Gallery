@@ -1,8 +1,14 @@
 import type { Media } from '../types/media';
 
-/** The date a media item belongs to on the timeline. */
+/** The date a media item belongs to on the timeline (photo date, falling back to upload date). */
 export function mediaDate(item: Pick<Media, 'taken_at' | 'created_at'>): Date {
   const d = new Date(item.taken_at || item.created_at);
+  return Number.isNaN(d.getTime()) ? new Date(0) : d;
+}
+
+/** The date a media item was uploaded/added to the gallery. */
+export function mediaAddedDate(item: Pick<Media, 'created_at'>): Date {
+  const d = new Date(item.created_at);
   return Number.isNaN(d.getTime()) ? new Date(0) : d;
 }
 
@@ -74,10 +80,10 @@ export interface DayGroup {
 }
 
 /** Group items by local day, keeping the order in which days first appear. */
-export function groupByDay(items: Media[]): DayGroup[] {
+export function groupByDay(items: Media[], dateOf: (m: Media) => Date = mediaDate): DayGroup[] {
   const map = new Map<string, DayGroup>();
   for (const item of items) {
-    const d = mediaDate(item);
+    const d = dateOf(item);
     const key = dayKey(d);
     let group = map.get(key);
     if (!group) {
@@ -92,5 +98,11 @@ export function groupByDay(items: Media[]): DayGroup[] {
 /** Newest first by taken_at (fallback created_at), then by id. */
 export function compareMediaDesc(a: Media, b: Media): number {
   const diff = mediaDate(b).getTime() - mediaDate(a).getTime();
+  return diff !== 0 ? diff : b.id - a.id;
+}
+
+/** Newest first by created_at (upload date), then by id. */
+export function compareMediaAddedDesc(a: Media, b: Media): number {
+  const diff = mediaAddedDate(b).getTime() - mediaAddedDate(a).getTime();
   return diff !== 0 ? diff : b.id - a.id;
 }

@@ -164,6 +164,9 @@ def process_image(path, mime_type):
         "width": None, "height": None, "taken_at": None, "taken_at_source": None,
         "thumbnail_path": None, "preview_path": None, "preview_width": None, "preview_height": None,
     }
+    # Cap decompressed image size: a 100MP image needs ~300 MB RAM at 3 bytes/px.
+    # This still handles any real camera shot while blocking pathological inputs.
+    Image.MAX_IMAGE_PIXELS = 100_000_000
     with Image.open(path) as original:
         result["taken_at"], result["taken_at_source"] = exif_taken_at(original)
         is_animated = getattr(original, "is_animated", False)

@@ -155,6 +155,9 @@ class MediaViewSet(viewsets.ModelViewSet):
             # Upload polling needs to see failed/duplicate items too.
             return queryset.filter(is_deleted=False)
         queryset = queryset.filter(is_deleted=False).exclude(status="duplicate")
+        ordering = self.request.query_params.get("ordering", "date")
+        if ordering == "added":
+            return filter_media(queryset, self.request.query_params).order_by("-created_at", "-id")
         return filter_media(queryset, self.request.query_params).order_by("-taken_at", "-created_at")
 
     # -- uploads -------------------------------------------------------------

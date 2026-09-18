@@ -19,6 +19,8 @@ import {
     FolderPlus,
     Heart,
     Image as ImageIcon,
+    CalendarDays,
+    Clock,
     Plus,
     RefreshCw,
     Search,
@@ -37,6 +39,7 @@ import { useUploadActions } from '../../context/UploadContext';
 import { mediaDate } from '../../utils/format';
 
 type LoadState = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'error';
+type SortOrdering = 'date' | 'added';
 
 const EMPTY_SELECTION = new Set<number>();
 
@@ -70,6 +73,7 @@ const GalleryScreen = () => {
     const [selectedIds, setSelectedIds] = useState<Set<number>>(EMPTY_SELECTION);
     const selectionMode = selectedIds.size > 0;
     const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
+    const [ordering, setOrdering] = useState<SortOrdering>('date');
 
     const selectionAnim = useRef(new Animated.Value(0)).current;
 
@@ -80,6 +84,7 @@ const GalleryScreen = () => {
     const hasMoreRef = useRef(true);
     const busyRef = useRef(false);
     const searchRef = useRef('');
+    const orderingRef = useRef<SortOrdering>('date');
     const logoutRef = useRef(logout);
     logoutRef.current = logout;
 
@@ -123,6 +128,7 @@ const GalleryScreen = () => {
             const response = await getMedia({
                 page: pageNumber,
                 search: searchRef.current.trim() || undefined,
+                ordering: orderingRef.current === 'added' ? 'added' : undefined,
             });
             if (!isMounted.current || id !== requestId.current) { return; }
 
@@ -168,6 +174,16 @@ const GalleryScreen = () => {
         const timeout = setTimeout(() => fetchPage(1, 'initial'), delay);
         return () => clearTimeout(timeout);
     }, [searchQuery, fetchPage]);
+
+    // Re-fetch from scratch when ordering changes.
+    useEffect(() => {
+        orderingRef.current = ordering;
+        pageRef.current = 0;
+        hasMoreRef.current = true;
+        setMedia([]);
+        fetchPage(1, 'initial');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ordering]);
 
     // New uploads finished: merge them in without resetting the scroll position.
     useEffect(() => {
@@ -354,6 +370,27 @@ const GalleryScreen = () => {
                 </View>
             </View>
 
+            {/* Sort toggle */}
+            {!selectionMode && (
+                <View style={styles.sortRow}>
+                    <TouchableOpacity
+                        style={[styles.sortPill, ordering === 'date' && styles.sortPillActive]}
+                        onPress={() => setOrdering('date')}
+                        activeOpacity={0.75}
+                    >
+                        <CalendarDays size={12} color={ordering === 'date' ? '#fff' : '#888'} />
+                        <Text style={[styles.sortPillText, ordering === 'date' && styles.sortPillTextActive]}>Date taken</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.sortPill, ordering === 'added' && styles.sortPillActive]}
+                        onPress={() => setOrdering('added')}
+                        activeOpacity={0.75}
+                    >
+                        <Clock size={12} color={ordering === 'added' ? '#fff' : '#888'} />
+                        <Text style={[styles.sortPillText, ordering === 'added' && styles.sortPillTextActive]}>Recently added</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
             <MediaGrid
                 ref={gridRef}
                 media={media}
@@ -542,4 +579,36 @@ const styles = StyleSheet.create({
     },
     actionBtn: { alignItems: 'center', justifyContent: 'center' },
     actionText: { fontSize: 12, fontWeight: '500', color: '#444', marginTop: 6 },
+
+    sortRow: {
+        flexDirection: 'row',
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingBottom: 6,
+        paddingTop: 2,
+    },
+    sortPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 20,
+        borderWidth: 1.5,
+        borderColor: '#d0d0d0',
+        backgroundColor: 'transparent',
+    },
+    sortPillActive: {
+        backgroundColor: '#1a73e8',
+        borderColor: '#1a73e8',
+    },
+    sortPillText: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: '#888',
+    },
+    sortPillTextActive: {
+        color: '#fff',
+    },
 });
+

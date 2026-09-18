@@ -30,11 +30,14 @@ export interface Paginated<T> {
   results: T[];
 }
 
+export type MediaOrdering = 'date' | 'added';
+
 export interface MediaFilters {
   is_favorite?: boolean;
   media_type?: MediaType;
   search?: string;
   album?: number | string;
+  ordering?: MediaOrdering;
 }
 
 export interface TimelineMonth {

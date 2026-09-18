@@ -14,6 +14,7 @@ export interface GetMediaParams {
   search?: string;
   mediaType?: 'image' | 'video';
   albumId?: number;
+  ordering?: 'date' | 'added';
 }
 
 export const getMedia = async ({
@@ -23,12 +24,14 @@ export const getMedia = async ({
   search,
   mediaType,
   albumId,
+  ordering,
 }: GetMediaParams = {}): Promise<PaginatedMedia> => {
   let url = `/media/?page=${page}&page_size=${pageSize}`;
   if (isFavorite) { url += '&is_favorite=true'; }
   if (search) { url += `&search=${encodeURIComponent(search)}`; }
   if (mediaType) { url += `&media_type=${mediaType}`; }
   if (albumId) { url += `&album=${albumId}`; }
+  if (ordering === 'added') { url += '&ordering=added'; }
 
   const response = await api.get<PaginatedMedia>(url);
   return response.data;

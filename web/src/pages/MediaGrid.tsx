@@ -1,16 +1,28 @@
-import { useMemo } from 'react';
-import { Upload } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { CalendarDays, Clock, Upload } from 'lucide-react';
 import { api } from '../api/client';
 import LibraryView from '../components/LibraryView';
 import { useUploadActions, useUploadCompleted } from '../context/uploads';
 import { useMediaCollection } from '../hooks/useMediaCollection';
 import type { PageFetcher } from '../hooks/useMediaCollection';
+import { mediaAddedDate } from '../utils/dateUtils';
+import type { MediaOrdering } from '../types/media';
+import type { Media } from '../types/media';
 
-const fetchAll: PageFetcher = (page) =>
-  api.listMedia({}, page).then((res) => ({ results: res.results, hasMore: !!res.next, count: res.count }));
+const makeFetcher =
+  (ordering: MediaOrdering): PageFetcher =>
+  (page) =>
+    api
+      .listMedia({ ordering }, page)
+      .then((res) => ({ results: res.results, hasMore: !!res.next, count: res.count }));
+
+const ADDED_DATE_OF = (m: Media) => mediaAddedDate(m);
 
 const MediaGrid = () => {
-  const collection = useMediaCollection(fetchAll);
+  const [ordering, setOrdering] = useState<MediaOrdering>('date');
+  const fetcher = useMemo(() => makeFetcher(ordering), [ordering]);
+  // Remount the collection (key) when ordering changes so pagination restarts cleanly.
+  const collection = useMediaCollection(fetcher);
   const { openFilePicker } = useUploadActions();
 
   // Insert freshly processed uploads without reloading the page.
@@ -29,7 +41,42 @@ const MediaGrid = () => {
     [openFilePicker],
   );
 
-  return <LibraryView collection={collection} empty={empty} />;
+  const handleOrdering = useCallback((o: MediaOrdering) => {
+    setOrdering(o);
+  }, []);
+
+  const header = (
+    <div className="sort-toggle" role="group" aria-label="Sort order">
+      <button
+        id="sort-date-taken"
+        className={`sort-toggle-btn${ordering === 'date' ? ' active' : ''}`}
+        onClick={() => handleOrdering('date')}
+        aria-pressed={ordering === 'date'}
+      >
+        <CalendarDays size={14} />
+        Date taken
+      </button>
+      <button
+        id="sort-recently-added"
+        className={`sort-toggle-btn${ordering === 'added' ? ' active' : ''}`}
+        onClick={() => handleOrdering('added')}
+        aria-pressed={ordering === 'added'}
+      >
+        <Clock size={14} />
+        Recently added
+      </button>
+    </div>
+  );
+
+  return (
+    <LibraryView
+      key={ordering}
+      collection={collection}
+      empty={empty}
+      header={header}
+      dateOf={ordering === 'added' ? ADDED_DATE_OF : undefined}
+    />
+  );
 };
 
 export default MediaGrid;

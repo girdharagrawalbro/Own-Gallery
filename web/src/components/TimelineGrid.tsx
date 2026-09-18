@@ -49,6 +49,8 @@ interface TimelineGridProps {
   onOpen?: (id: number) => void;
   clickSelects?: boolean;
   empty: EmptyState;
+  /** Date extractor for day-grouping headers. Defaults to photo date (taken_at). */
+  dateOf?: (m: Media) => Date;
 }
 
 /* ------------------------------------------------------------------ */
@@ -145,6 +147,7 @@ const TimelineGrid = ({
   onOpen,
   clickSelects = false,
   empty,
+  dateOf,
 }: TimelineGridProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -162,7 +165,7 @@ const TimelineGrid = ({
     return () => ro.disconnect();
   }, []);
 
-  const groups = useMemo(() => groupByDay(items), [items]);
+  const groups = useMemo(() => groupByDay(items, dateOf), [items, dateOf]);
 
   const { sections, order, flat, sectionItems } = useMemo(() => {
     const now = new Date();
