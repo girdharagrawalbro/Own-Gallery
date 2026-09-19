@@ -52,7 +52,7 @@ const AddMediaModal = ({ visible, albumId, onClose, onAdded }: Props) => {
             pageRef.current = pageNumber;
             hasMoreRef.current = !!data.next;
         } catch (err) {
-            console.log('Failed to fetch media for selection', err);
+            console.error('Failed to fetch media for selection', err);
         } finally {
             busyRef.current = false;
             setLoading(false);
@@ -67,7 +67,7 @@ const AddMediaModal = ({ visible, albumId, onClose, onAdded }: Props) => {
         setExistingMediaIds(EMPTY_SET);
         getAlbumMedia(albumId)
             .then(data => setExistingMediaIds(new Set(data.media.map(m => m.id))))
-            .catch(err => console.log('Failed to fetch existing media', err));
+            .catch(err => console.error('Failed to fetch existing media', err));
     }, [visible, albumId, fetchMedia]);
 
     const onEndReached = useCallback(() => {

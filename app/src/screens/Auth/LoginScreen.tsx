@@ -42,7 +42,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
             setAuthenticated(true);
             ToastAndroid.show('Login successful', ToastAndroid.SHORT);
         } catch (error: any) {
-            console.log(
+            console.error(
                 'LOGIN ERROR:',
                 error?.response?.data || error?.message,
             );

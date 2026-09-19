@@ -290,7 +290,9 @@ export interface MediaGridProps {
   onEndReached?: () => void;
   loadingMore?: boolean;
   ListEmptyComponent?: React.ReactElement;
+  ListHeaderComponent?: React.ReactElement;
   bottomPadding?: number;
+  onScroll?: (event: any) => void;
   ref?: React.Ref<MediaGridHandle>;
 }
 
@@ -314,7 +316,9 @@ const MediaGrid = ({
   onEndReached,
   loadingMore = false,
   ListEmptyComponent,
+  ListHeaderComponent,
   bottomPadding = 100,
+  onScroll,
   ref,
 }: MediaGridProps) => {
   const { width, height } = useWindowDimensions();
@@ -565,6 +569,9 @@ const MediaGrid = ({
             loadingMore ? <ActivityIndicator style={styles.footerSpinner} color="#1a73e8" /> : undefined
           }
           ListEmptyComponent={ListEmptyComponent}
+          ListHeaderComponent={ListHeaderComponent}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
         />
       </Animated.View>
     </GestureDetector>

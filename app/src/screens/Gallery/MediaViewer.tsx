@@ -14,6 +14,7 @@ import {
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     ToastAndroid,
     View,
 } from 'react-native';
@@ -22,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
     ArrowLeft,
+    CalendarDays,
     Download,
     FolderPlus,
     Heart,
@@ -41,6 +43,7 @@ import {
     downloadMediaToDevice,
     moveToTrash,
     toggleFavorite,
+    updateTakenAt,
 } from '../../api/media';
 import SelectAlbumModal from '../Albums/SelectAlbumModal';
 import { formatBytes, formatDayTitle, formatDuration, formatTime, mediaDate } from '../../utils/format';
@@ -162,6 +165,8 @@ const ViewerContent = ({
     const [isProcessing, setIsProcessing] = useState(false);
     const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
     const [infoVisible, setInfoVisible] = useState(false);
+    const [datePickerVisible, setDatePickerVisible] = useState(false);
+    const [editingDate, setEditingDate] = useState<Date | null>(null);
 
     const uiOpacity = useRef(new Animated.Value(1)).current;
 
@@ -320,6 +325,23 @@ const ViewerContent = ({
         }
     };
 
+    const handleEditDate = () => {
+        if (!currentItem) { return; }
+        setEditingDate(currentItem.taken_at ? new Date(currentItem.taken_at) : new Date());
+        setDatePickerVisible(true);
+    };
+
+    const handleDateConfirm = async (date: Date) => {
+        setDatePickerVisible(false);
+        if (!currentItem) { return; }
+        try {
+            const updated = await updateTakenAt(currentItem.id, date);
+            onMediaUpdated?.(updated);
+        } catch {
+            Alert.alert('Error', 'Failed to update date.');
+        }
+    };
+
     const takenAt = currentItem ? mediaDate(currentItem) : null;
     const selectedAlbumIds = useMemo(() => (currentItem ? [currentItem.id] : []), [currentItem]);
 
@@ -427,10 +449,15 @@ const ViewerContent = ({
                         <Text style={styles.infoTitle}>Details</Text>
 
                         <InfoRow label="Name" value={currentItem?.filename || 'Unknown'} />
-                        <InfoRow
-                            label="Date Taken"
-                            value={takenAt ? `${takenAt.toLocaleDateString()} ${formatTime(takenAt)}` : 'Unknown'}
-                        />
+                        <Pressable onPress={handleEditDate} style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Date Taken</Text>
+                            <View style={styles.infoEditableValue}>
+                                <Text style={styles.infoValue} numberOfLines={1}>
+                                    {takenAt ? `${takenAt.toLocaleDateString()} ${formatTime(takenAt)}` : 'Tap to set'}
+                                </Text>
+                                <CalendarDays size={16} color="#1a73e8" style={{ marginLeft: 8 }} />
+                            </View>
+                        </Pressable>
                         <InfoRow label="Size" value={formatBytes(currentItem?.file_size || 0)} />
                         <InfoRow
                             label="Resolution"
@@ -443,6 +470,21 @@ const ViewerContent = ({
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            {/* Date Picker Modal */}
+            <Modal
+                visible={datePickerVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setDatePickerVisible(false)}
+            >
+                <DateEditModal
+                    initialDate={editingDate || new Date()}
+                    onConfirm={handleDateConfirm}
+                    onCancel={() => setDatePickerVisible(false)}
+                    insets={insets}
+                />
+            </Modal>
         </GestureHandlerRootView>
     );
 };
@@ -453,6 +495,82 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
         <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
     </View>
 );
+
+const DateEditModal = ({ initialDate, onConfirm, onCancel, insets }: {
+    initialDate: Date;
+    onConfirm: (date: Date) => void;
+    onCancel: () => void;
+    insets: { bottom: number };
+}) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const [year, setYear] = React.useState(String(initialDate.getFullYear()));
+    const [month, setMonth] = React.useState(pad(initialDate.getMonth() + 1));
+    const [day, setDay] = React.useState(pad(initialDate.getDate()));
+    const [hour, setHour] = React.useState(pad(initialDate.getHours()));
+    const [minute, setMinute] = React.useState(pad(initialDate.getMinutes()));
+
+    const handleConfirm = () => {
+        const d = new Date(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            parseInt(hour, 10),
+            parseInt(minute, 10),
+        );
+        if (isNaN(d.getTime())) {
+            Alert.alert('Invalid date', 'Please enter a valid date and time.');
+            return;
+        }
+        onConfirm(d);
+    };
+
+    return (
+        <View style={styles.dateEditOverlay}>
+            <View style={[styles.dateEditSheet, { paddingBottom: insets.bottom + 24 }]}>
+                <Text style={styles.dateEditTitle}>Edit Date Taken</Text>
+                <View style={styles.dateEditRow}>
+                    <View style={styles.dateEditField}>
+                        <Text style={styles.dateEditLabel}>Year</Text>
+                        <TextInput style={styles.dateEditInput} value={year} onChangeText={setYear}
+                            keyboardType="number-pad" maxLength={4} placeholderTextColor="#888" />
+                    </View>
+                    <Text style={styles.dateEditSep}>/</Text>
+                    <View style={styles.dateEditField}>
+                        <Text style={styles.dateEditLabel}>Month</Text>
+                        <TextInput style={styles.dateEditInput} value={month} onChangeText={setMonth}
+                            keyboardType="number-pad" maxLength={2} placeholderTextColor="#888" />
+                    </View>
+                    <Text style={styles.dateEditSep}>/</Text>
+                    <View style={styles.dateEditField}>
+                        <Text style={styles.dateEditLabel}>Day</Text>
+                        <TextInput style={styles.dateEditInput} value={day} onChangeText={setDay}
+                            keyboardType="number-pad" maxLength={2} placeholderTextColor="#888" />
+                    </View>
+                    <Text style={styles.dateEditSep}>  </Text>
+                    <View style={styles.dateEditField}>
+                        <Text style={styles.dateEditLabel}>Hour</Text>
+                        <TextInput style={styles.dateEditInput} value={hour} onChangeText={setHour}
+                            keyboardType="number-pad" maxLength={2} placeholderTextColor="#888" />
+                    </View>
+                    <Text style={styles.dateEditSep}>:</Text>
+                    <View style={styles.dateEditField}>
+                        <Text style={styles.dateEditLabel}>Min</Text>
+                        <TextInput style={styles.dateEditInput} value={minute} onChangeText={setMinute}
+                            keyboardType="number-pad" maxLength={2} placeholderTextColor="#888" />
+                    </View>
+                </View>
+                <View style={styles.dateEditActions}>
+                    <Pressable style={styles.dateEditCancelBtn} onPress={onCancel}>
+                        <Text style={styles.dateEditCancelText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={styles.dateEditConfirmBtn} onPress={handleConfirm}>
+                        <Text style={styles.dateEditConfirmText}>Save</Text>
+                    </Pressable>
+                </View>
+            </View>
+        </View>
+    );
+};
 
 // ─── Modal wrapper ──────────────────────────────────────────────────────────
 
@@ -618,5 +736,89 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#fff',
         fontWeight: '500',
+    },
+    infoEditableValue: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexShrink: 1,
+    },
+    dateEditOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    dateEditSheet: {
+        backgroundColor: '#1c1c1e',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 24,
+    },
+    dateEditTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#fff',
+        marginBottom: 24,
+        textAlign: 'center',
+    },
+    dateEditRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        marginBottom: 28,
+        gap: 4,
+    },
+    dateEditField: {
+        alignItems: 'center',
+    },
+    dateEditLabel: {
+        fontSize: 11,
+        color: '#8e8e93',
+        marginBottom: 6,
+    },
+    dateEditInput: {
+        backgroundColor: '#2c2c2e',
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: '600',
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        minWidth: 52,
+        textAlign: 'center',
+    },
+    dateEditSep: {
+        color: '#8e8e93',
+        fontSize: 20,
+        fontWeight: '600',
+        marginBottom: 8,
+        paddingHorizontal: 2,
+    },
+    dateEditActions: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    dateEditCancelBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#2c2c2e',
+        alignItems: 'center',
+    },
+    dateEditCancelText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    dateEditConfirmBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#1a73e8',
+        alignItems: 'center',
+    },
+    dateEditConfirmText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
     },
 });

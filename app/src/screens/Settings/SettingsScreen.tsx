@@ -94,7 +94,7 @@ const SettingsScreen = () => {
     try {
       setBackupStatus(await getAutoBackupStatus());
     } catch (e) {
-      console.log('Failed to read auto backup status', e);
+      console.error('Failed to read auto backup status', e);
     }
   }, []);
 
@@ -172,7 +172,7 @@ const SettingsScreen = () => {
       const data = await getStats();
       setStats(data);
     } catch (err) {
-      console.log('Failed to fetch stats', err);
+      console.error('Failed to fetch stats', err);
     } finally {
       setLoadingStats(false);
     }
@@ -186,7 +186,7 @@ const SettingsScreen = () => {
       });
       setCacheSize(formatBytes(totalSize));
     } catch (e) {
-      console.log('Error calculating cache size:', e);
+      console.error('Error calculating cache size:', e);
     }
   };
 
@@ -232,7 +232,7 @@ const SettingsScreen = () => {
       ToastAndroid.show('Profile updated successfully', ToastAndroid.SHORT);
       setEditProfileVisible(false);
     } catch (error: any) {
-      console.log('Update profile error:', error?.response?.data);
+      console.error('Update profile error:', error?.response?.data);
       Alert.alert('Error', 'Failed to update profile.');
     } finally {
       setIsUpdating(false);

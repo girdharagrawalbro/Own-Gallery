@@ -29,7 +29,7 @@ const TrashScreen = () => {
             const data = await getTrashMedia();
             setMedia(data);
         } catch (err) {
-            console.log('Failed to fetch trash', err);
+            console.error('Failed to fetch trash', err);
         } finally {
             setLoading(false);
             setRefreshing(false);

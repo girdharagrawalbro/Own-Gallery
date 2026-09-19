@@ -149,7 +149,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
                 }
             }
         } catch (e) {
-            console.log('Failed to poll upload status', e);
+            console.error('Failed to poll upload status', e);
         }
         return changed;
     }, [applyServerStatus]);
@@ -222,7 +222,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
                 try {
                     await addMediaToAlbum(task.albumId, [media.id]);
                 } catch (e) {
-                    console.log('Failed to add uploaded media to album', e);
+                    console.error('Failed to add uploaded media to album', e);
                 }
             }
 
@@ -236,7 +236,7 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
             if (controller.signal.aborted || err?.name === 'CanceledError' || err instanceof UploadCancelledError) {
                 return;
             }
-            console.log('Upload error for', task.fileName, err?.message);
+            console.error('Upload error for', task.fileName, err?.message);
             patchTask(taskId, { status: 'failed', error: errorMessage(err) });
         } finally {
             controllersRef.current.delete(taskId);

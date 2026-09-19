@@ -183,6 +183,21 @@ export const bulkFavorite = async (mediaIds: number[], isFavorite: boolean = tru
   await api.post('/media/bulk-favorite/', { media_ids: mediaIds, is_favorite: isFavorite });
 };
 
+export const updateTakenAt = async (id: number, takenAt: Date): Promise<Media> => {
+  const response = await api.post<Media>(`/media/${id}/update-taken-at/`, {
+    taken_at: takenAt.toISOString(),
+  });
+  return response.data;
+};
+
+export const bulkUpdateTakenAt = async (mediaIds: number[], takenAt: Date): Promise<{updated: number}> => {
+  const response = await api.post<{updated: number}>('/media/bulk-update-taken-at/', {
+    media_ids: mediaIds,
+    taken_at: takenAt.toISOString(),
+  });
+  return response.data;
+};
+
 const safeFileName = (item: Pick<Media, 'id' | 'filename'>): string => {
   const cleaned = (item.filename || '').replace(/[/\\?%*:|"<>]/g, '_').trim();
   return cleaned || `media_${item.id}`;

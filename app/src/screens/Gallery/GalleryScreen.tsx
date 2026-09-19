@@ -4,6 +4,7 @@ import {
     Animated,
     BackHandler,
     Keyboard,
+    Modal,
     Pressable,
     StyleSheet,
     Text,
@@ -27,16 +28,15 @@ import {
     Trash2,
     X,
 } from 'lucide-react-native';
-
-import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
-import MediaViewer from './MediaViewer';
-import UploadPreviewModal from './UploadPreviewModal';
-import SelectAlbumModal from '../Albums/SelectAlbumModal';
-import { bulkFavorite, bulkTrash, downloadMediaToDevice, getMedia } from '../../api/media';
+import { bulkFavorite, bulkTrash, bulkUpdateTakenAt, downloadMediaToDevice, getMedia } from '../../api/media';
 import { Media } from '../../types/media';
 import { useAuth } from '../../context/AuthContext';
 import { useUploadActions } from '../../context/UploadContext';
 import { mediaDate } from '../../utils/format';
+import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
+import MediaViewer from './MediaViewer';
+import UploadPreviewModal from './UploadPreviewModal';
+import SelectAlbumModal from '../Albums/SelectAlbumModal';
 
 type LoadState = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'error';
 type SortOrdering = 'date' | 'added';
@@ -74,6 +74,7 @@ const GalleryScreen = () => {
     const selectionMode = selectedIds.size > 0;
     const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
     const [ordering, setOrdering] = useState<SortOrdering>('date');
+    const [bulkDatePickerVisible, setBulkDatePickerVisible] = useState(false);
 
     const selectionAnim = useRef(new Animated.Value(0)).current;
 
@@ -323,6 +324,20 @@ const GalleryScreen = () => {
         }
     };
 
+    const handleBulkDateChange = async (date: Date) => {
+        setBulkDatePickerVisible(false);
+        const ids = Array.from(selectedIds);
+        try {
+            await bulkUpdateTakenAt(ids, date);
+            const updated = new Map(media.filter(m => ids.includes(m.id)).map(m => [m.id, { ...m, taken_at: date.toISOString() }]));
+            setMedia(prev => prev.map(m => updated.get(m.id) || m));
+            ToastAndroid.show(`Date updated for ${ids.length} items`, ToastAndroid.SHORT);
+            clearSelection();
+        } catch {
+            Alert.alert('Error', 'Failed to update dates.');
+        }
+    };
+
     const selectedIdList = React.useMemo(() => Array.from(selectedIds), [selectedIds]);
 
     const emptyComponent = loadState === 'error' ? (
@@ -443,6 +458,10 @@ const GalleryScreen = () => {
                             <FolderPlus size={24} color="#444" />
                             <Text style={styles.actionText}>Add</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => setBulkDatePickerVisible(true)}>
+                            <CalendarDays size={24} color="#444" />
+                            <Text style={styles.actionText}>Date</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity style={styles.actionBtn} onPress={handleBulkFavorite}>
                             <Heart size={24} color="#444" />
                             <Text style={styles.actionText}>Favorite</Text>
@@ -481,11 +500,97 @@ const GalleryScreen = () => {
                 onClose={() => setSelectAlbumVisible(false)}
                 onAdded={clearSelection}
             />
+
+            {/* Bulk Date Picker */}
+            <Modal visible={bulkDatePickerVisible} transparent animationType="fade" onRequestClose={() => setBulkDatePickerVisible(false)}>
+                <BulkDatePickerModal
+                    count={selectedIds.size}
+                    onConfirm={handleBulkDateChange}
+                    onCancel={() => setBulkDatePickerVisible(false)}
+                />
+            </Modal>
         </View>
     );
 };
 
 export default GalleryScreen;
+
+const BulkDatePickerModal = ({ count, onConfirm, onCancel }: {
+    count: number;
+    onConfirm: (date: Date) => void;
+    onCancel: () => void;
+}) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const now = new Date();
+    const [year, setYear] = React.useState(String(now.getFullYear()));
+    const [month, setMonth] = React.useState(pad(now.getMonth() + 1));
+    const [day, setDay] = React.useState(pad(now.getDate()));
+    const [hour, setHour] = React.useState(pad(now.getHours()));
+    const [minute, setMinute] = React.useState(pad(now.getMinutes()));
+
+    const handleConfirm = () => {
+        const d = new Date(
+            parseInt(year, 10),
+            parseInt(month, 10) - 1,
+            parseInt(day, 10),
+            parseInt(hour, 10),
+            parseInt(minute, 10),
+        );
+        if (isNaN(d.getTime())) {
+            Alert.alert('Invalid date', 'Please enter a valid date and time.');
+            return;
+        }
+        onConfirm(d);
+    };
+
+    return (
+        <View style={bulkStyles.overlay}>
+            <View style={bulkStyles.sheet}>
+                <Text style={bulkStyles.title}>Set Date for {count} item{count > 1 ? 's' : ''}</Text>
+                <Text style={bulkStyles.subtitle}>All selected items will have the same date taken.</Text>
+                <View style={bulkStyles.row}>
+                    {[['Year', year, setYear, 4], ['Month', month, setMonth, 2], ['Day', day, setDay, 2], ['Hour', hour, setHour, 2], ['Min', minute, setMinute, 2]].map(([lbl, val, setter, max], i) => (
+                        <React.Fragment key={i}>
+                            {i === 3 && <Text style={bulkStyles.sep}>  </Text>}
+                            {i > 0 && i < 3 && <Text style={bulkStyles.sep}>/</Text>}
+                            {i === 4 && <Text style={bulkStyles.sep}>:</Text>}
+                            <View style={bulkStyles.field}>
+                                <Text style={bulkStyles.label}>{lbl as string}</Text>
+                                <TextInput style={bulkStyles.input} value={val as string}
+                                    onChangeText={setter as any} keyboardType="number-pad" maxLength={max as number} />
+                            </View>
+                        </React.Fragment>
+                    ))}
+                </View>
+                <View style={bulkStyles.actions}>
+                    <Pressable style={bulkStyles.cancelBtn} onPress={onCancel}>
+                        <Text style={bulkStyles.cancelText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={bulkStyles.confirmBtn} onPress={handleConfirm}>
+                        <Text style={bulkStyles.confirmText}>Apply to All</Text>
+                    </Pressable>
+                </View>
+            </View>
+        </View>
+    );
+};
+
+const bulkStyles = StyleSheet.create({
+    overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    sheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+    title: { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 6, textAlign: 'center' },
+    subtitle: { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 20 },
+    row: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', marginBottom: 24, gap: 4 },
+    field: { alignItems: 'center' },
+    label: { fontSize: 11, color: '#888', marginBottom: 4 },
+    input: { backgroundColor: '#f1f3f4', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, fontSize: 18, fontWeight: '600', minWidth: 52, textAlign: 'center', color: '#111' },
+    sep: { fontSize: 18, fontWeight: '600', color: '#888', marginBottom: 10, paddingHorizontal: 2 },
+    actions: { flexDirection: 'row', gap: 12 },
+    cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f1f3f4', alignItems: 'center' },
+    cancelText: { color: '#333', fontSize: 16, fontWeight: '600' },
+    confirmBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#1a73e8', alignItems: 'center' },
+    confirmText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+});
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },

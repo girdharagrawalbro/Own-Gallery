@@ -63,7 +63,7 @@ export const AuthProvider = ({
                 setIsAuthenticated(false);
             }
         } catch (error) {
-            console.log(
+            console.error(
                 'AUTH CHECK ERROR:',
                 error,
             );

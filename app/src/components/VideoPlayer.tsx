@@ -244,7 +244,7 @@ const VideoPlayer = ({
   }, [onControlsVisibleChange]);
 
   const handleError = useCallback((e: OnVideoErrorData) => {
-    console.log('VIDEO LOAD ERROR:', e?.error);
+    console.error('VIDEO LOAD ERROR:', e?.error);
     const err = e?.error || {};
     setError(err.localizedDescription || err.errorString || err.error || 'Could not play this video');
     setBuffering(false);

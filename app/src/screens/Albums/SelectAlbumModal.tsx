@@ -11,9 +11,10 @@ import {
     SafeAreaView,
     Alert,
     ToastAndroid,
+    TextInput,
 } from 'react-native';
 import { Folder } from 'lucide-react-native';
-import { getAlbums, addMediaToAlbum } from '../../api/albums';
+import { getAlbums, addMediaToAlbum, createAlbum } from '../../api/albums';
 import { Album } from '../../types/album';
 import RemoteImage from '../../components/RemoteImage';
 
@@ -32,6 +33,8 @@ const SelectAlbumModal = ({ visible, mediaIds, onClose, onAdded }: Props) => {
     const [albums, setAlbums] = useState<Album[]>([]);
     const [loading, setLoading] = useState(false);
     const [adding, setAdding] = useState(false);
+    const [newAlbumName, setNewAlbumName] = useState('');
+    const [creating, setCreating] = useState(false);
 
     const fetchAlbums = useCallback(async () => {
         setLoading(true);
@@ -40,7 +43,7 @@ const SelectAlbumModal = ({ visible, mediaIds, onClose, onAdded }: Props) => {
             const data = await getAlbums(1);
             setAlbums(data.results);
         } catch (err) {
-            console.log('Failed to fetch albums for selection', err);
+            console.error('Failed to fetch albums for selection', err);
         } finally {
             setLoading(false);
         }
@@ -49,8 +52,27 @@ const SelectAlbumModal = ({ visible, mediaIds, onClose, onAdded }: Props) => {
     useEffect(() => {
         if (visible) {
             fetchAlbums();
+            setNewAlbumName('');
         }
     }, [visible, fetchAlbums]);
+
+    const handleCreateAlbum = async () => {
+        const name = newAlbumName.trim();
+        if (!name || mediaIds.length === 0) return;
+        setCreating(true);
+        try {
+            const newAlbum = await createAlbum(name);
+            await addMediaToAlbum(newAlbum.id, mediaIds);
+            const label = mediaIds.length === 1 ? '' : `${mediaIds.length} items `;
+            ToastAndroid.show(`Added ${label}to ${newAlbum.name}`, ToastAndroid.SHORT);
+            onAdded?.(newAlbum);
+            onClose();
+        } catch {
+            Alert.alert('Error', 'Failed to create album or add media');
+        } finally {
+            setCreating(false);
+        }
+    };
 
     const handleSelectAlbum = async (album: Album) => {
         if (mediaIds.length === 0) { return; }
@@ -97,6 +119,27 @@ const SelectAlbumModal = ({ visible, mediaIds, onClose, onAdded }: Props) => {
                     </Pressable>
                 </View>
 
+                <View style={styles.createContainer}>
+                    <TextInput
+                        style={styles.createInput}
+                        placeholder="New album name"
+                        value={newAlbumName}
+                        onChangeText={setNewAlbumName}
+                        editable={!creating && !adding}
+                    />
+                    <Pressable 
+                        style={[styles.createBtn, (!newAlbumName.trim() || creating || adding) && styles.createBtnDisabled]}
+                        onPress={handleCreateAlbum}
+                        disabled={!newAlbumName.trim() || creating || adding}
+                    >
+                        {creating ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                            <Text style={styles.createBtnText}>Create</Text>
+                        )}
+                    </Pressable>
+                </View>
+
                 {loading ? (
                     <ActivityIndicator style={styles.loader} size="large" color="#007AFF" />
                 ) : (
@@ -132,6 +175,11 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111' },
     closeBtn: { padding: 8 },
     closeBtnText: { fontSize: 16, color: '#007AFF' },
+    createContainer: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee', gap: 12 },
+    createInput: { flex: 1, height: 44, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 12, backgroundColor: '#f9f9f9' },
+    createBtn: { height: 44, paddingHorizontal: 16, backgroundColor: '#007AFF', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+    createBtnDisabled: { opacity: 0.5 },
+    createBtnText: { color: '#fff', fontWeight: '600' },
     loader: { marginTop: 40 },
     listContent: { padding: 16 },
     albumCard: { width: CELL, marginBottom: 24, marginHorizontal: 8 },

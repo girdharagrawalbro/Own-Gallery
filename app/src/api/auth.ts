@@ -19,22 +19,12 @@ export const login = async (
             },
         );
 
-        console.log('LOGIN RESPONSE:', response.data);
-
         const { access, refresh } = response.data;
-
-        console.log('Saving tokens...');
 
         await saveTokens(access, refresh);
 
-        console.log('Tokens saved successfully');
-
         return response.data;
     } catch (error: any) {
-        console.log('LOGIN FUNCTION ERROR:', error);
-        console.log('ERROR RESPONSE:', error?.response?.data);
-        console.log('ERROR MESSAGE:', error?.message);
-
         throw error;
     }
 };

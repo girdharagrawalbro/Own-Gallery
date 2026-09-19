@@ -52,7 +52,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
             setAuthenticated(true);
             ToastAndroid.show('Account created successfully', ToastAndroid.SHORT);
         } catch (error: any) {
-            console.log(
+            console.error(
                 'REGISTER ERROR:',
                 error?.response?.data || error?.message,
             );

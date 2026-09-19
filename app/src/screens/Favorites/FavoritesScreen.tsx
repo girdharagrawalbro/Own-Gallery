@@ -42,7 +42,7 @@ const FavoritesScreen = () => {
             hasMoreRef.current = !!data.next;
             hasLoadedRef.current = true;
         } catch (err) {
-            console.log('Failed to fetch favorites', err);
+            console.error('Failed to fetch favorites', err);
         } finally {
             busyRef.current = false;
             setLoading(false);

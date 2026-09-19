@@ -44,7 +44,7 @@ const AlbumsScreen = () => {
             const data = await getAlbums(1, searchQuery);
             setAlbums(data.results);
         } catch (err) {
-            console.log('Failed to fetch albums', err);
+            console.error('Failed to fetch albums', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -127,7 +127,7 @@ const AlbumsScreen = () => {
     const renderItem = ({ item }: { item: Album }) => (
         <Pressable
             style={styles.albumCard}
-            onPress={() => navigation.navigate('AlbumDetail', { albumId: item.id, albumName: item.name })}
+            onPress={() => navigation.navigate('AlbumDetail', { albumId: item.id, albumName: item.name, coverUrl: item.cover_url })}
             onLongPress={() => handleAlbumLongPress(item)}
         >
             <View style={styles.coverContainer}>

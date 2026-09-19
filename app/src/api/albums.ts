@@ -44,3 +44,8 @@ export const removeMediaFromAlbum = async (id: number, media_ids: number[]): Pro
     const response = await api.post(`/albums/${id}/remove-media/`, { media_ids });
     return response.data;
 };
+
+export const setAlbumCover = async (albumId: number, mediaId: number): Promise<Album> => {
+    const response = await api.post<Album>(`/albums/${albumId}/set-cover/`, { media_id: mediaId });
+    return response.data;
+};
