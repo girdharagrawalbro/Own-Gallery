@@ -137,7 +137,7 @@ MAX_TOTAL_ATTEMPTS = 8  # across retries and requeues
 def upload_media_to_telegram(self, media_id):
     with _media_lock(media_id) as acquired:
         if not acquired:
-            logger.info("Media %s: already being processed, skipping duplicate delivery", media_id)
+
             return
         _upload_media_to_telegram(self, media_id)
 
@@ -165,14 +165,13 @@ def _upload_media_to_telegram(self, media_id):
 
     started = time.monotonic()
     timings = {}
-    logger.info("Media %s: attempt %d started, %.1fs after upload", media_id, self.request.retries + 1,
-                (timezone.now() - media.updated_at).total_seconds())
+
 
     storage = TelegramStorage()
     blob_storage = BlobStorageService()
     local_path = processing.temp_path(os.path.splitext(media.filename)[1], f"media_{media.id}_")
     generated = []
-    logger.info("[TASK] media_id=%d: using_mtproto=%s temp_path=%s", media_id, storage.uses_mtproto, local_path)
+
 
     def mark(step, since):
         timings[step] = round(time.monotonic() - since, 2)
@@ -180,24 +179,24 @@ def _upload_media_to_telegram(self, media_id):
 
     try:
         step = time.monotonic()
-        logger.info("[TASK] media_id=%d: downloading blob=%s", media_id, blob_name)
+
         blob_storage.download_file(blob_name, local_path)
         step = mark("download", step)
         size = os.path.getsize(local_path)
-        logger.info("[TASK] media_id=%d: blob downloaded size=%d bytes (%.2fs)", media_id, size, timings.get("download", 0))
+
         media.file_size = size
 
         if not media.file_hash:
-            logger.debug("[TASK] media_id=%d: computing SHA-256", media_id)
+
             media.file_hash = _sha256(local_path)
-            logger.info("[TASK] media_id=%d: hash=%s", media_id, media.file_hash)
+
             duplicate = (
                 Media.objects.filter(user=media.user, file_hash=media.file_hash, status="completed")
                 .exclude(pk=media.pk)
                 .first()
             )
             if duplicate:
-                logger.info("[TASK] media_id=%d: DUPLICATE of media_id=%d — marking duplicate", media_id, duplicate.id)
+
                 media.status = "duplicate"
                 media.upload_error = f"Already in your library (media {duplicate.id})."
                 media.temp_file_path = None
@@ -220,7 +219,7 @@ def _upload_media_to_telegram(self, media_id):
         preview_dims = (None, None)
 
         if media.media_type == "image":
-            logger.info("[TASK] media_id=%d: processing IMAGE mime=%s", media_id, media.mime_type)
+
             try:
                 info = processing.process_image(local_path, media.mime_type)
                 thumbnail_path, preview_path = info["thumbnail_path"], info["preview_path"]
@@ -228,46 +227,39 @@ def _upload_media_to_telegram(self, media_id):
                 media.width, media.height = info["width"], info["height"]
                 preview_dims = (info["preview_width"], info["preview_height"])
                 apply_taken_at(media, info["taken_at"], info["taken_at_source"])
-                logger.info("[TASK] media_id=%d: image processed %dx%d thumbnail=%s preview=%s",
-                            media_id, media.width or 0, media.height or 0, thumbnail_path, preview_path)
+
             except Exception as exc:  # unreadable image: still keep the original
                 logger.warning("[TASK] media_id=%d: image processing failed: %s", media_id, exc)
         else:
-            logger.info("[TASK] media_id=%d: processing VIDEO mime=%s", media_id, media.mime_type)
+
             try:
                 info = processing.probe_video(local_path)
                 media.width, media.height, media.duration = info["width"], info["height"], info["duration"]
                 apply_taken_at(media, info["taken_at"], "metadata")
-                logger.info("[TASK] media_id=%d: video probed %dx%d dur=%.1fs codec=%s",
-                            media_id, media.width or 0, media.height or 0,
-                            media.duration or 0, info.get("video_codec"))
+
                 thumbnail_path, preview_path = processing.video_thumbnail(local_path, info["duration"])
                 generated += [thumbnail_path, preview_path]
                 plan = processing.plan_stream_variant(media.mime_type, info, local_path)
-                logger.info("[TASK] media_id=%d: stream variant plan=%s", media_id, plan)
+
                 if plan and not media.variants.filter(kind=MediaVariant.STREAM).exists():
                     stream_path = processing.build_stream_variant(local_path, plan, info)
                     generated.append(stream_path)
-                    logger.info("Media %s: built %s stream variant", media_id, plan)
+
             except Exception as exc:
                 logger.warning("[TASK] media_id=%d: video processing failed: %s", media_id, exc)
 
         step = mark("process", step)
         if not media.telegram_message_id:
-            logger.info("[TASK] media_id=%d: uploading to Telegram (size=%d thumbnail=%s)",
-                        media_id, size, thumbnail_path)
+
             stored = storage.upload(local_path, media.filename, media.mime_type, size, thumbnail_path)
             media.telegram_message_id = stored["message_id"]
             media.telegram_file_id = stored["file_id"]
             media.telegram_file_unique_id = stored["file_unique_id"]
             media.telegram_thumbnail_file_id = stored["thumbnail_file_id"]
             media.save()
-            logger.info("[TASK] media_id=%d: Telegram upload OK message_id=%s file_id=%s",
-                        media_id, stored["message_id"], stored["file_id"])
-        else:
-            logger.info("[TASK] media_id=%d: Telegram upload skipped (already uploaded message_id=%s)",
-                        media_id, media.telegram_message_id)
 
+        else:
+            pass
         step = mark("telegram_original", step)
         _store_variant(storage, media, MediaVariant.PREVIEW, preview_path, "image/jpeg", *preview_dims)
         _store_variant(storage, media, MediaVariant.STREAM, stream_path, "video/mp4", media.width, media.height)
@@ -279,8 +271,7 @@ def _upload_media_to_telegram(self, media_id):
         media.temp_file_path = None
         media.save()
 
-        logger.info("Media %s: completed in %.1fs %s (%s MB, mtproto=%s)", media_id, time.monotonic() - started,
-                    timings, round(size / 1048576, 1), storage.uses_mtproto)
+
 
         try:
             blob_storage.delete_file(blob_name)

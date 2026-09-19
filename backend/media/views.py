@@ -452,6 +452,39 @@ class MediaViewSet(viewsets.ModelViewSet):
         link = SharedLink.objects.filter(media=media).first() or SharedLink.objects.create(media=media)
         return Response({"url": request.build_absolute_uri(f"/share/{link.id}/")})
 
+    @action(detail=True, methods=["post"], url_path="update-taken-at")
+    def update_taken_at(self, request, pk=None):
+        """Manually correct the date/time a media item was taken."""
+        media = self.get_object()
+        raw = request.data.get("taken_at")
+        if not raw:
+            return Response({"error": "taken_at is required."}, status=status.HTTP_400_BAD_REQUEST)
+        dt = parse_client_timestamp(raw)
+        if dt is None:
+            return Response({"error": "Invalid date format."}, status=status.HTTP_400_BAD_REQUEST)
+        media.taken_at = dt
+        media.taken_at_source = "manual"
+        media.save(update_fields=["taken_at", "taken_at_source", "updated_at"])
+        return Response(self.get_serializer(media).data)
+
+    @action(detail=False, methods=["post"], url_path="bulk-update-taken-at")
+    def bulk_update_taken_at(self, request):
+        """Manually correct the date/time for multiple media items at once."""
+        media_ids = request.data.get("media_ids", [])
+        raw = request.data.get("taken_at")
+        if not isinstance(media_ids, list) or not media_ids:
+            return Response({"error": "media_ids must be a non-empty list."}, status=status.HTTP_400_BAD_REQUEST)
+        if not raw:
+            return Response({"error": "taken_at is required."}, status=status.HTTP_400_BAD_REQUEST)
+        dt = parse_client_timestamp(raw)
+        if dt is None:
+            return Response({"error": "Invalid date format."}, status=status.HTTP_400_BAD_REQUEST)
+        updated = Media.objects.filter(id__in=media_ids, user=request.user, is_deleted=False).update(
+            taken_at=dt, taken_at_source="manual"
+        )
+        return Response({"updated": updated})
+
+
     def _delete_permanently(self, queryset):
         message_ids = []
         for media in queryset.prefetch_related("variants"):

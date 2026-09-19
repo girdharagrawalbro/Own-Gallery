@@ -121,3 +121,19 @@ class AlbumViewSet(viewsets.ModelViewSet):
             "album": serializer.data,
             "media": media_serializer.data
         })
+
+    @action(detail=True, methods=["post"], url_path="set-cover")
+    def set_cover(self, request, pk=None):
+        """Set a media item as the album's cover image."""
+        album = self.get_object()
+        media_id = request.data.get("media_id")
+        if not media_id:
+            return Response({"error": "media_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        from media.models import Media
+        try:
+            media = album.media.get(id=media_id, user=request.user, is_deleted=False)
+        except Media.DoesNotExist:
+            return Response({"error": "Media not found in this album."}, status=status.HTTP_404_NOT_FOUND)
+        album.cover_media = media
+        album.save(update_fields=["cover_media", "updated_at"])
+        return Response(self.get_serializer(album).data)

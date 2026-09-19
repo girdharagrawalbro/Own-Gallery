@@ -90,8 +90,7 @@ class MTProtoClient:
             new_session = self._run(self._start(session), timeout=90)
             if new_session:
                 cache.set(self.session_cache_key, new_session, timeout=None)
-            logger.info("MTProto connected in %.1fs (pid %s, %s)", time.monotonic() - started, os.getpid(),
-                        "new bot login" if new_session else "reused session")
+
 
     async def _start(self, session):
         from telethon import TelegramClient
