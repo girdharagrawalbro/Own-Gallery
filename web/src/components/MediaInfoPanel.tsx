@@ -1,20 +1,38 @@
-import { Calendar, Clock, FileImage, FileVideoCamera, HardDrive, Maximize, X } from 'lucide-react';
+import { Calendar, Clock, Edit2, FileImage, FileVideoCamera, HardDrive, Maximize, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Media } from '../types/media';
 import { formatBytes, formatDateTime, formatDuration } from '../utils/dateUtils';
+import { showToast } from '../utils/toast';
 
-const Row = ({ icon, primary, secondary }: { icon: ReactNode; primary: ReactNode; secondary?: ReactNode }) => (
+const Row = ({ icon, primary, secondary, action }: { icon: ReactNode; primary: ReactNode; secondary?: ReactNode; action?: ReactNode }) => (
   <div className="info-row">
     <div className="info-icon">{icon}</div>
-    <div>
-      <div className="info-primary">{primary}</div>
-      {secondary && <div className="info-secondary">{secondary}</div>}
+    <div className="info-content">
+      <div>
+        <div className="info-primary">{primary}</div>
+        {secondary && <div className="info-secondary">{secondary}</div>}
+      </div>
+      {action && <div className="info-action">{action}</div>}
     </div>
   </div>
 );
 
-const MediaInfoPanel = ({ item, onClose }: { item: Media; onClose: () => void }) => {
+const MediaInfoPanel = ({ item, onClose, onUpdateTakenAt }: { item: Media; onClose: () => void; onUpdateTakenAt?: (id: number, date: Date) => void }) => {
   const megapixels = item.width && item.height ? ((item.width * item.height) / 1_000_000).toFixed(1) : null;
+
+  const handleEditDate = () => {
+    if (!onUpdateTakenAt) return;
+    const currentStr = formatDateTime(item.taken_at || item.created_at);
+    const dateStr = window.prompt(`Edit date/time (YYYY-MM-DD HH:MM):`, currentStr);
+    if (!dateStr) return;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      showToast('Invalid date format', 'error');
+      return;
+    }
+    onUpdateTakenAt(item.id, date);
+  };
+
   return (
     <aside className="viewer-info" aria-label="Details">
       <header className="viewer-info-header">
@@ -25,7 +43,18 @@ const MediaInfoPanel = ({ item, onClose }: { item: Media; onClose: () => void })
       </header>
       <div className="viewer-info-body">
         <div className="info-section-title">Details</div>
-        <Row icon={<Calendar size={20} />} primary={formatDateTime(item.taken_at || item.created_at)} secondary="Date taken" />
+        <Row
+          icon={<Calendar size={20} />}
+          primary={formatDateTime(item.taken_at || item.created_at)}
+          secondary="Date taken"
+          action={
+            onUpdateTakenAt && (
+              <button className="btn-icon btn-small" onClick={handleEditDate} title="Edit date">
+                <Edit2 size={16} />
+              </button>
+            )
+          }
+        />
         <Row
           icon={item.media_type === 'video' ? <FileVideoCamera size={20} /> : <FileImage size={20} />}
           primary={<span className="break-all">{item.filename}</span>}

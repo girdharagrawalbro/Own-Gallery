@@ -487,6 +487,104 @@ button:disabled {
   justify-content: flex-start;
 }
 
+.album-hero {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  background: #1a1a2e;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 24px;
+}
+
+.album-hero-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.album-hero-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a2a3e;
+  color: rgba(255,255,255,0.3);
+}
+
+.album-hero-gradient {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60%;
+  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+}
+
+.album-hero-content {
+  position: relative;
+  z-index: 10;
+  color: #fff;
+}
+
+.album-hero-title {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  margin-bottom: 4px;
+}
+
+.album-hero-subtitle {
+  font-size: 16px;
+  color: rgba(255,255,255,0.8);
+}
+
+.album-hero-top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  z-index: 20;
+  background: linear-gradient(rgba(0,0,0,0.5), transparent);
+}
+
+.album-hero-top-bar .btn-icon {
+  color: #fff;
+  background: rgba(0,0,0,0.3);
+  margin-right: 12px;
+}
+
+.album-hero-top-bar .btn-icon:hover {
+  background: rgba(0,0,0,0.5);
+}
+
+.album-hero-top-title {
+  flex: 1;
+  color: #fff;
+  font-weight: 600;
+  font-size: 18px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.album-hero-top-title.visible {
+  opacity: 1;
+}
+
 .album-header-text {
   flex: 1;
   min-width: 0;

@@ -15,11 +15,12 @@ interface MediaViewerProps {
   onToggleFavorite?: (id: number) => void;
   /** Resolves true when the item was trashed. */
   onTrash?: (id: number) => Promise<boolean>;
+  onUpdateTakenAt?: (id: number, date: Date) => void;
 }
 
 const SWIPE_THRESHOLD = 50;
 
-const MediaViewer = ({ items, currentId, onNavigate, onClose, onToggleFavorite, onTrash }: MediaViewerProps) => {
+const MediaViewer = ({ items, currentId, onNavigate, onClose, onToggleFavorite, onTrash, onUpdateTakenAt }: MediaViewerProps) => {
   const [showInfo, setShowInfo] = useState(() => {
     try {
       return window.innerWidth >= 1100 && localStorage.getItem('viewer_info') === '1';
@@ -195,7 +196,7 @@ const MediaViewer = ({ items, currentId, onNavigate, onClose, onToggleFavorite, 
         )}
       </div>
 
-      {showInfo && <MediaInfoPanel item={item} onClose={toggleInfo} />}
+      {showInfo && <MediaInfoPanel item={item} onClose={toggleInfo} onUpdateTakenAt={onUpdateTakenAt} />}
       {shareId !== null && <ShareLinkModal mediaId={shareId} onClose={() => setShareId(null)} />}
     </div>,
     document.body,

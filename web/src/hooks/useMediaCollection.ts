@@ -27,6 +27,7 @@ export interface MediaCollection {
   /** Optimistically remove items, run the request, and put them back if it fails. */
   removeOptimistic: (ids: number[], request: () => Promise<unknown>, errorMessage: string) => Promise<boolean>;
   trash: (ids: number[]) => Promise<boolean>;
+  mutate: (items: Media[]) => void;
 }
 
 const PROCESSING_POLL_MIN_MS = 5000;
@@ -227,5 +228,6 @@ export function useMediaCollection(fetchPage: PageFetcher): MediaCollection {
     setFavorite,
     removeOptimistic,
     trash,
+    mutate: setItems,
   };
 }

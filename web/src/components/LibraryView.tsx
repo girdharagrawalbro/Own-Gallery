@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Download, FolderPlus, Heart, HeartOff, Trash2 } from 'lucide-react';
+import { Calendar, Download, FolderPlus, Heart, HeartOff, Trash2 } from 'lucide-react';
 import { api, getErrorMessage } from '../api/client';
 import type { MediaCollection } from '../hooks/useMediaCollection';
 import type { Album, Media } from '../types/media';
@@ -70,6 +70,28 @@ const LibraryView = ({ collection, empty, header, gridFilter, renderExtraActions
     if (await collection.trash(ids)) showToast(`Moved ${plural(ids.length, 'item')} to trash`);
   };
 
+  const handleBulkDateChange = async () => {
+    const dateStr = window.prompt(`Set new date and time for ${plural(selectedIds.length, 'item')} (YYYY-MM-DD HH:MM):`);
+    if (!dateStr) return;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      showToast('Invalid date format', 'error');
+      return;
+    }
+    const ids = selectedIds;
+    clearSelection();
+    try {
+      await api.bulkUpdateTakenAt(ids, date);
+      // Optimistically update collection items
+      if (collection.mutate) {
+        collection.mutate(items.map(m => ids.includes(m.id) ? { ...m, taken_at: date.toISOString() } : m));
+      }
+      showToast(`Updated date for ${plural(ids.length, 'item')}`);
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Failed to update date'), 'error');
+    }
+  };
+
   const handleAddToAlbum = async (album: Album) => {
     setAlbumPickerOpen(false);
     try {
@@ -78,6 +100,18 @@ const LibraryView = ({ collection, empty, header, gridFilter, renderExtraActions
       clearSelection();
     } catch (err) {
       showToast(getErrorMessage(err, 'Could not add to album'), 'error');
+    }
+  };
+
+  const handleUpdateTakenAt = async (id: number, date: Date) => {
+    try {
+      await api.updateTakenAt(id, date);
+      if (collection.mutate) {
+        collection.mutate(items.map((m) => (m.id === id ? { ...m, taken_at: date.toISOString() } : m)));
+      }
+      showToast('Date updated');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Failed to update date'), 'error');
     }
   };
 
@@ -107,9 +141,11 @@ const LibraryView = ({ collection, empty, header, gridFilter, renderExtraActions
           label={allFavorite ? 'Remove from favorites' : 'Favorite'}
           onClick={handleFavorite}
         />
+        <SelectionAction icon={<Calendar size={20} />} label="Edit date" onClick={handleBulkDateChange} />
         <SelectionAction icon={<Download size={20} />} label="Download" onClick={() => downloadMedia(selectedItems)} />
         <SelectionAction icon={<Trash2 size={20} />} label="Move to trash" onClick={handleTrash} />
       </SelectionBar>
+
 
       {albumPickerOpen && <SelectAlbumModal onClose={() => setAlbumPickerOpen(false)} onSelect={handleAddToAlbum} />}
 
@@ -121,6 +157,7 @@ const LibraryView = ({ collection, empty, header, gridFilter, renderExtraActions
           onClose={closeViewer}
           onToggleFavorite={collection.toggleFavorite}
           onTrash={(id) => collection.trash([id])}
+          onUpdateTakenAt={handleUpdateTakenAt}
         />
       )}
     </div>

@@ -184,8 +184,12 @@ export const api = {
   // Media mutations
   setFavorite: (id: number, isFavorite: boolean) =>
     apiClient.post<Media>(`/media/${id}/favorite/`, { is_favorite: isFavorite }).then((r) => r.data),
+  updateTakenAt: (id: number, takenAt: Date) =>
+    apiClient.post<Media>(`/media/${id}/update-taken-at/`, { taken_at: takenAt.toISOString() }).then((r) => r.data),
   bulkFavorite: (ids: number[], isFavorite: boolean) =>
     apiClient.post('/media/bulk-favorite/', { media_ids: ids, is_favorite: isFavorite }),
+  bulkUpdateTakenAt: (ids: number[], takenAt: Date) =>
+    apiClient.post('/media/bulk-update-taken-at/', { media_ids: ids, taken_at: takenAt.toISOString() }),
   trash: (id: number) => apiClient.post(`/media/${id}/trash/`),
   bulkTrash: (ids: number[]) => apiClient.post('/media/bulk-trash/', { media_ids: ids }),
   restore: (id: number) => apiClient.post(`/media/${id}/restore/`),
@@ -205,6 +209,8 @@ export const api = {
     apiClient.post(`/albums/${albumId}/add-media/`, { media_ids: ids }),
   removeFromAlbum: (albumId: number | string, ids: number[]) =>
     apiClient.post(`/albums/${albumId}/remove-media/`, { media_ids: ids }),
+  setAlbumCover: (albumId: number | string, mediaId: number) =>
+    apiClient.post<Album>(`/albums/${albumId}/set-cover/`, { media_id: mediaId }).then((r) => r.data),
 
   // Resumable chunked upload ("Upload B")
   createUpload: (

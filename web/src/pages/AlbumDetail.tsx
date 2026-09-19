@@ -54,37 +54,68 @@ const AlbumContent = ({ albumId }: { albumId: string }) => {
     if (ok) showToast(`Removed ${ids.length} item${ids.length === 1 ? '' : 's'} from album`);
   };
 
+  const handleSetCover = async (ids: number[], clearSelection: () => void) => {
+    if (ids.length !== 1) return;
+    clearSelection();
+    try {
+      const updatedAlbum = await api.setAlbumCover(albumId, ids[0]);
+      setAlbum(updatedAlbum);
+      showToast('Album cover updated');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Failed to set cover'), 'error');
+    }
+  };
+
   const count = collection.count;
 
   return (
-    <LibraryView
-      collection={collection}
-      empty={{
-        icon: <ImageIcon size={48} />,
-        title: 'This album is empty',
-        description: 'Select photos in your library and choose “Add to album”.',
-      }}
-      renderExtraActions={(ids, clear) => (
-        <SelectionAction icon={<FolderMinus size={20} />} label="Remove from album" onClick={() => handleRemove(ids, clear)} />
-      )}
-      header={
-        <header className="page-header album-header">
-          <button className="btn-icon" onClick={() => navigate('/albums')} aria-label="Back to albums" title="Back to albums">
+    <div className="album-detail-page" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div className="album-hero">
+        {album?.cover_url ? (
+          <img className="album-hero-img" src={album.cover_url} alt="" />
+        ) : (
+          <div className="album-hero-placeholder">
+            <ImageIcon size={64} />
+          </div>
+        )}
+        <div className="album-hero-gradient" />
+        <div className="album-hero-top-bar">
+          <button className="btn-icon" onClick={() => navigate('/albums')} aria-label="Back" title="Back">
             <ArrowLeft size={22} />
           </button>
-          <div className="album-header-text">
-            <h1>{album?.name ?? ' '}</h1>
-            <p className="page-subtitle">
-              {album?.description ? `${album.description} · ` : ''}
-              {count !== null ? `${count} item${count === 1 ? '' : 's'}` : ''}
-            </p>
-          </div>
-          <button className="btn-icon danger" onClick={handleDeleteAlbum} title="Delete album" aria-label="Delete album">
+          <div style={{ flex: 1 }} />
+          <button className="btn-icon" onClick={handleDeleteAlbum} title="Delete album" aria-label="Delete album" style={{ color: '#ff6b6b' }}>
             <Trash2 size={20} />
           </button>
-        </header>
-      }
-    />
+        </div>
+        <div className="album-hero-content">
+          <h1 className="album-hero-title">{album?.name ?? ' '}</h1>
+          <p className="album-hero-subtitle">
+            {album?.description ? `${album.description} · ` : ''}
+            {count !== null ? `${count} item${count === 1 ? '' : 's'}` : ''}
+          </p>
+        </div>
+      </div>
+      
+      <div style={{ flex: 1, position: 'relative' }}>
+        <LibraryView
+          collection={collection}
+          empty={{
+            icon: <ImageIcon size={48} />,
+            title: 'This album is empty',
+            description: 'Select photos in your library and choose “Add to album”.',
+          }}
+          renderExtraActions={(ids, clear) => (
+            <>
+              {ids.length === 1 && (
+                <SelectionAction icon={<ImageIcon size={20} />} label="Set as cover" onClick={() => handleSetCover(ids, clear)} />
+              )}
+              <SelectionAction icon={<FolderMinus size={20} />} label="Remove from album" onClick={() => handleRemove(ids, clear)} />
+            </>
+          )}
+        />
+      </div>
+    </div>
   );
 };
 
