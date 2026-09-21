@@ -74,13 +74,54 @@ export const useGridColumns = (): [number, (n: number) => void] => {
 // ─── List model ─────────────────────────────────────────────────────────────
 
 type HeaderItem = { type: 'header'; key: string; title: string; ids: number[] };
-type RowItem = { type: 'row'; key: string; items: Media[] };
+type RowItem = { type: 'row'; key: string; items: Media[]; height: number; widths: number[] };
 type ListItem = HeaderItem | RowItem;
 
-const buildRows = (items: Media[], columns: number, out: ListItem[]) => {
-  for (let i = 0; i < items.length; i += columns) {
-    const chunk = items.slice(i, i + columns);
-    out.push({ type: 'row', key: `row-${chunk[0].id}`, items: chunk });
+const buildRows = (items: Media[], columns: number, out: ListItem[], screenWidth: number, gap: number) => {
+  const targetAspectRatioSum = columns;
+  let currentRow: { media: Media; ar: number }[] = [];
+  let currentAspectRatioSum = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const m = items[i];
+    let ar = 1;
+    if (m.width && m.height) {
+      ar = m.width / m.height;
+      // Clamp aspect ratios to prevent extreme sizing
+      if (ar < 0.5) ar = 0.5;
+      if (ar > 3) ar = 3;
+    }
+    currentRow.push({ media: m, ar });
+    currentAspectRatioSum += ar;
+
+    // Finish row if it meets/exceeds the target, or if it's the last item
+    if (currentAspectRatioSum >= targetAspectRatioSum || i === items.length - 1) {
+      const gapsWidth = (currentRow.length - 1) * gap;
+      const availableWidth = screenWidth - gapsWidth;
+      
+      let rowHeight = availableWidth / currentAspectRatioSum;
+      
+      // If it's the last row and it's not "full", don't stretch it to fill
+      if (i === items.length - 1 && currentAspectRatioSum < targetAspectRatioSum * 0.8) {
+        rowHeight = screenWidth / targetAspectRatioSum; // Use a standard height instead of stretching
+      }
+
+      // Constrain row height bounds
+      const minRowHeight = 60;
+      const maxRowHeight = screenWidth * 0.8;
+      rowHeight = Math.max(minRowHeight, Math.min(rowHeight, maxRowHeight));
+
+      out.push({
+        type: 'row',
+        key: `row-${currentRow[0].media.id}`,
+        items: currentRow.map(r => r.media),
+        height: rowHeight,
+        widths: currentRow.map(r => rowHeight * r.ar),
+      });
+
+      currentRow = [];
+      currentAspectRatioSum = 0;
+    }
   }
 };
 
@@ -88,7 +129,8 @@ const buildRows = (items: Media[], columns: number, out: ListItem[]) => {
 
 interface CellProps {
   item: Media;
-  size: number;
+  width: number;
+  height: number;
   isFirst: boolean;
   selected: boolean;
   disabled: boolean;
@@ -101,7 +143,8 @@ interface CellProps {
 
 const GridCell = React.memo(({
   item,
-  size,
+  width,
+  height,
   isFirst,
   selected,
   disabled,
@@ -127,11 +170,11 @@ const GridCell = React.memo(({
 
   const isProcessing = item.status === 'processing';
   const isFailed = item.status === 'failed';
-  const compact = size < 90;
+  const compact = height < 90;
 
   return (
     <Pressable
-      style={[styles.cell, !isFirst && styles.cellGap, { width: size, height: size }]}
+      style={[styles.cell, !isFirst && styles.cellGap, { width, height }]}
       onPress={() => onPress(item)}
       onLongPress={() => onLongPress(item)}
       delayLongPress={300}
@@ -203,7 +246,8 @@ interface RowProps {
   /** '1'/'0' per item; a string so React.memo can compare cheaply */
   selKey: string;
   disKey: string;
-  size: number;
+  height: number;
+  widths: number[];
   selectionMode: boolean;
   showFavoriteBadge: boolean;
   renderCellOverlay?: (item: Media) => React.ReactNode;
@@ -215,19 +259,21 @@ const GridRow = React.memo(({
   items,
   selKey,
   disKey,
-  size,
+  height,
+  widths,
   selectionMode,
   showFavoriteBadge,
   renderCellOverlay,
   onPress,
   onLongPress,
 }: RowProps) => (
-  <View style={[styles.row, { height: size + GRID_GAP }]}>
+  <View style={[styles.row, { height: height + GRID_GAP }]}>
     {items.map((item, i) => (
       <GridCell
         key={item.id}
         item={item}
-        size={size}
+        width={widths[i]}
+        height={height}
         isFirst={i === 0}
         selected={selKey[i] === '1'}
         disabled={disKey[i] === '1'}
@@ -323,11 +369,9 @@ const MediaGrid = ({
 }: MediaGridProps) => {
   const { width, height } = useWindowDimensions();
   const [columns, setColumns] = useGridColumns();
-  const cellSize = (width - GRID_GAP * (columns - 1)) / columns;
-  const rowHeight = cellSize + GRID_GAP;
   const listRef = useRef<FlatList<ListItem>>(null);
 
-  // Build rows + fixed layout offsets in one pass.
+  // Build rows + dynamic layout offsets in one pass.
   const { listData, offsets, rowKeyById, indexById } = useMemo(() => {
     const data: ListItem[] = [];
     const idx = new Map<number, number>();
@@ -346,7 +390,7 @@ const MediaGrid = ({
           title: formatDayTitle(d, now),
           ids: bucket.map(m => m.id),
         });
-        buildRows(bucket, columns, data);
+        buildRows(bucket, columns, data, width, GRID_GAP);
       };
       for (const m of media) {
         const k = dayKey(mediaDate(m));
@@ -359,7 +403,7 @@ const MediaGrid = ({
       }
       flush();
     } else {
-      buildRows(media, columns, data);
+      buildRows(media, columns, data, width, GRID_GAP);
     }
 
     const offs: number[] = new Array(data.length + 1);
@@ -371,13 +415,13 @@ const MediaGrid = ({
         y += HEADER_HEIGHT;
       } else {
         item.items.forEach(m => rowKeys.set(m.id, i));
-        y += rowHeight;
+        y += item.height + GRID_GAP;
       }
     });
     offs[data.length] = y;
 
     return { listData: data, offsets: offs, rowKeyById: rowKeys, indexById: idx };
-  }, [media, columns, groupByDate, rowHeight]);
+  }, [media, columns, groupByDate, width]);
 
   // Stable callbacks: the latest props are read through a ref so rows never re-render for them.
   const latest = useRef({ onPressItem, onLongPressItem, onToggleGroup, indexById });
@@ -429,7 +473,8 @@ const MediaGrid = ({
         items={item.items}
         selKey={selKey}
         disKey={disKey}
-        size={cellSize}
+        height={item.height}
+        widths={item.widths}
         selectionMode={selectionMode}
         showFavoriteBadge={showFavoriteBadge}
         renderCellOverlay={renderCellOverlay}
@@ -442,7 +487,6 @@ const MediaGrid = ({
     disabledIds,
     selectionMode,
     showHeaderCheckbox,
-    cellSize,
     showFavoriteBadge,
     renderCellOverlay,
     handlePress,
@@ -503,10 +547,11 @@ const MediaGrid = ({
       if (rowIndex == null) { return; }
       const row = listData[rowIndex];
       if (row && visibleKeys.current.has(row.key)) { return; }
-      const offset = Math.max(0, offsets[rowIndex] - height / 2 + rowHeight / 2);
+      const currentHeight = offsets[rowIndex + 1] - offsets[rowIndex];
+      const offset = Math.max(0, offsets[rowIndex] - height / 2 + currentHeight / 2);
       listRef.current?.scrollToOffset({ offset, animated: false });
     },
-  }), [rowKeyById, listData, offsets, height, rowHeight]);
+  }), [rowKeyById, listData, offsets, height]);
 
   // ── Pinch to change the column count ──────────────────────────────────────
   const pinchScale = useSharedValue(1);
@@ -546,7 +591,7 @@ const MediaGrid = ({
           renderItem={renderItem}
           getItemLayout={getItemLayout}
           contentContainerStyle={{ paddingBottom: bottomPadding }}
-          initialNumToRender={Math.ceil(height / rowHeight) + 2}
+          initialNumToRender={Math.ceil(height / (width / columns)) + 2}
           maxToRenderPerBatch={8}
           updateCellsBatchingPeriod={30}
           windowSize={7}

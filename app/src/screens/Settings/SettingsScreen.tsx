@@ -266,7 +266,6 @@ const SettingsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollContent}>
-        <Text style={styles.headerTitle}>Settings</Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>ACCOUNT</Text>
@@ -523,7 +522,7 @@ export default SettingsScreen;
 const styles = StyleSheet.create({
   rowTextBlock: { flex: 1, marginRight: 12 },
   container: { flex: 1, backgroundColor: '#f2f2f7' },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 16 },
+  scrollContent: { paddingHorizontal: 16, paddingTop:   50 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 24, color: '#000' },
 
   section: { marginBottom: 24 },

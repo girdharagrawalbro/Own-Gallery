@@ -22,6 +22,27 @@ export const formatDayTitle = (d: Date, now: Date = new Date()): string => {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 };
 
+export const formatDateRange = (start: Date, end: Date): string => {
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return '';
+  const startY = start.getFullYear();
+  const startM = start.getMonth();
+  const startD = start.getDate();
+  const endY = end.getFullYear();
+  const endM = end.getMonth();
+  const endD = end.getDate();
+
+  if (startY !== endY) {
+    return `${MONTHS[startM]} ${startD}, ${startY} - ${MONTHS[endM]} ${endD}, ${endY}`;
+  }
+  if (startM !== endM) {
+    return `${MONTHS[startM]} ${startD} - ${MONTHS[endM]} ${endD}, ${startY}`;
+  }
+  if (startD !== endD) {
+    return `${MONTHS[startM]} ${startD}-${endD}, ${startY}`;
+  }
+  return `${MONTHS[startM]} ${startD}, ${startY}`;
+};
+
 export const formatTime = (d: Date): string => {
   let h = d.getHours();
   const m = d.getMinutes();

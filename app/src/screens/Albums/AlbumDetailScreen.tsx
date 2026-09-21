@@ -11,8 +11,10 @@ import {
     TextInput,
     ToastAndroid,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View,
     StatusBar,
+    Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +27,7 @@ import {
     Image as ImageIcon,
     Plus,
     X,
+    MoreVertical,
 } from 'lucide-react-native';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 
@@ -34,13 +37,14 @@ import AddMediaModal from './AddMediaModal';
 import UploadPreviewModal from '../Gallery/UploadPreviewModal';
 import SelectAlbumModal from './SelectAlbumModal';
 import RemoteImage from '../../components/RemoteImage';
-import { getAlbumMedia, removeMediaFromAlbum, setAlbumCover } from '../../api/albums';
+import { getAlbumMedia, removeMediaFromAlbum, setAlbumCover, updateAlbum, deleteAlbum } from '../../api/albums';
 import { bulkFavorite, bulkUpdateTakenAt } from '../../api/media';
 import { Media } from '../../types/media';
 import { useUploadActions } from '../../context/UploadContext';
+import { formatDateRange, mediaDate, dayKey } from '../../utils/format';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const HERO_HEIGHT = 300;
+const HERO_HEIGHT = 600;
 const COMPACT_HEADER_HEIGHT = 56;
 const EMPTY_SELECTION = new Set<number>();
 
@@ -56,7 +60,7 @@ const AlbumDetailScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [coverUrl, setCoverUrl] = useState<string | null>(route.params?.coverUrl || null);
-    const [albumName] = useState(initialAlbumName);
+    const [albumName, setAlbumName] = useState(initialAlbumName);
 
     // ── Selection state ───────────────────────────────────────────────────
     const [selectedIds, setSelectedIds] = useState<Set<number>>(EMPTY_SELECTION);
@@ -110,6 +114,9 @@ const AlbumDetailScreen = () => {
     const [addModalVisible, setAddModalVisible] = useState(false);
     const [uploadModalVisible, setUploadModalVisible] = useState(false);
     const [uploadAssets, setUploadAssets] = useState<Asset[]>([]);
+    const [albumMenuVisible, setAlbumMenuVisible] = useState(false);
+    const [renameModalVisible, setRenameModalVisible] = useState(false);
+    const [renameAlbumNameInput, setRenameAlbumNameInput] = useState('');
 
     const scrollY = useRef(new Animated.Value(0)).current;
 
@@ -119,13 +126,11 @@ const AlbumDetailScreen = () => {
         outputRange: [1, 0],
         extrapolate: 'clamp',
     });
-    const compactHeaderOpacity = scrollY.interpolate({
-        inputRange: [
-            HERO_HEIGHT - COMPACT_HEADER_HEIGHT - insets.top - 40,
-            HERO_HEIGHT - COMPACT_HEADER_HEIGHT - insets.top,
-        ],
-        outputRange: [0, 1],
-        extrapolate: 'clamp',
+
+    const compactHeaderOpacity = selectionAnim;
+    const backBtnOpacity = selectionAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [1, 0],
     });
 
     // ── Data ───────────────────────────────────────────────────────────────
@@ -234,10 +239,6 @@ const AlbumDetailScreen = () => {
         }
     };
 
-    const handleSetCoverFromHero = () => {
-        Alert.alert('Set Cover', 'Long-press any photo in the album to start selecting, then use the context menu.');
-    };
-
     const handleAddPress = () => {
         Alert.alert('Add Media to Album', 'Choose a source', [
             { text: 'Cancel', style: 'cancel' },
@@ -257,101 +258,134 @@ const AlbumDetailScreen = () => {
 
     const selectedIdList = React.useMemo(() => Array.from(selectedIds), [selectedIds]);
 
-    // ── Long-press context menu when NOT in selection mode (single item) ────
-    const handleSingleLongPress = useCallback((item: Media) => {
-        if (selectionMode) {
-            toggleSelection(item.id);
-            return;
+    const shouldGroupByDate = React.useMemo(() => {
+        if (!media || media.length === 0) return false;
+        const firstDay = dayKey(mediaDate(media[0]));
+        for (let i = 1; i < media.length; i++) {
+            if (dayKey(mediaDate(media[i])) !== firstDay) {
+                return true;
+            }
         }
-        Alert.alert('Photo Options', item.filename || 'Photo', [
+        return false;
+    }, [media]);
+    const handleSingleLongPress = useCallback((item: Media) => {
+        toggleSelection(item.id);
+    }, [toggleSelection]);
+
+    const handleSelectionOptions = useCallback(() => {
+        Alert.alert('Selected Items', `${selectedIds.size} selected`, [
             { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Select',
-                onPress: () => toggleSelection(item.id),
-            },
             {
                 text: 'Set as Cover',
                 onPress: async () => {
+                    const id = Array.from(selectedIds)[0];
+                    if (!id) return;
                     try {
-                        const updatedAlbum = await setAlbumCover(albumId, item.id);
+                        const updatedAlbum = await setAlbumCover(albumId, id);
                         if (updatedAlbum.cover_url) { setCoverUrl(updatedAlbum.cover_url); }
                         ToastAndroid.show('Album cover updated', ToastAndroid.SHORT);
+                        clearSelection();
                     } catch {
                         Alert.alert('Error', 'Failed to set cover');
                     }
-                },
+                }
             },
             {
                 text: 'Remove from Album',
                 style: 'destructive',
-                onPress: async () => {
-                    try {
-                        await removeMediaFromAlbum(albumId, [item.id]);
-                        ToastAndroid.show('Removed from album', ToastAndroid.SHORT);
-                        setMedia(prev => prev.filter(m => m.id !== item.id));
-                    } catch {
-                        Alert.alert('Error', 'Failed to remove media');
-                    }
-                },
-            },
+                onPress: handleBulkRemove,
+            }
         ]);
-    }, [albumId, selectionMode, toggleSelection]);
+    }, [selectedIds, albumId, handleBulkRemove, clearSelection]);
 
-    // ── Render ─────────────────────────────────────────────────────────────
-    const listHeader = (
-        <View style={styles.listHeader}>
-            <Text style={styles.listHeaderName}>{albumName}</Text>
-            <Text style={styles.listHeaderCount}>{media.length} items</Text>
-        </View>
-    );
+    const handleAlbumOptions = useCallback(() => {
+        setAlbumMenuVisible(true);
+    }, []);
+
+    const handleRenameAlbum = async () => {
+        if (!renameAlbumNameInput.trim()) return;
+        try {
+            await updateAlbum(albumId, { name: renameAlbumNameInput.trim() });
+            setAlbumName(renameAlbumNameInput.trim());
+            setRenameModalVisible(false);
+            ToastAndroid.show('Album renamed successfully', ToastAndroid.SHORT);
+        } catch (error) {
+            console.error('Rename failed', error);
+            Alert.alert('Error', 'Failed to rename album');
+        }
+    };
+
+    const handleDeleteAlbum = () => {
+        setAlbumMenuVisible(false);
+        Alert.alert(
+            'Delete Album',
+            'Are you sure you want to delete this album? The photos inside will not be deleted.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteAlbum(albumId);
+                            ToastAndroid.show('Album deleted', ToastAndroid.SHORT);
+                            navigation.goBack();
+                        } catch (error) {
+                            console.error('Delete failed', error);
+                            Alert.alert('Error', 'Failed to delete album');
+                        }
+                    }
+                }
+            ]
+        );
+    };
 
     return (
         <View style={styles.container}>
+            {/* @ts-ignore */}
             <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-            {/* Compact sticky header (appears when scrolled down past hero) */}
+            {/* Compact sticky header (only for selection mode) */}
             <Animated.View
                 style={[styles.compactHeader, { paddingTop: insets.top, opacity: compactHeaderOpacity }]}
-                pointerEvents="box-none"
+                pointerEvents={selectionMode ? "auto" : "none"}
             >
-                {selectionMode ? (
+                {selectionMode && (
                     <>
                         <TouchableOpacity onPress={clearSelection} style={styles.compactBackBtn} hitSlop={15}>
                             <X size={24} color="#fff" />
                         </TouchableOpacity>
                         <Text style={styles.compactTitle}>{selectedIds.size} selected</Text>
-                        <View style={{ width: 40 }} />
-                    </>
-                ) : (
-                    <>
-                        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.compactBackBtn} hitSlop={15}>
-                            <ArrowLeft size={24} color="#fff" />
+                        <TouchableOpacity onPress={handleSelectionOptions} style={[styles.compactBackBtn, { alignItems: 'flex-end', marginLeft: 'auto' }]} hitSlop={15}>
+                            <MoreVertical size={24} color="#fff" />
                         </TouchableOpacity>
-                        <Text style={styles.compactTitle} numberOfLines={1}>{albumName}</Text>
-                        <View style={{ width: 40 }} />
                     </>
                 )}
             </Animated.View>
 
             {/* Transparent back button over hero (hidden during selection) */}
             <Animated.View
-                style={[styles.heroBackBtn, { top: insets.top + 8, opacity: heroOpacity }]}
+                style={[styles.heroBackBtn, { top: insets.top + 8, opacity: backBtnOpacity }]}
                 pointerEvents="box-none"
             >
-                {selectionMode ? (
-                    <TouchableOpacity onPress={clearSelection} hitSlop={15} style={styles.heroBackBtnInner}>
-                        <X size={24} color="#fff" />
-                    </TouchableOpacity>
-                ) : (
-                    <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={15} style={styles.heroBackBtnInner}>
-                        <ArrowLeft size={24} color="#fff" />
-                    </TouchableOpacity>
-                )}
+                <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={15} style={styles.heroBackBtnInner}>
+                    <ArrowLeft size={24} color="#fff" />
+                </TouchableOpacity>
             </Animated.View>
 
+            {/* Transparent options button over hero (hidden during selection) */}
+            <Animated.View
+                style={[styles.heroOptionsBtn, { top: insets.top + 8, opacity: backBtnOpacity }]}
+                pointerEvents="box-none"
+            >
+                <TouchableOpacity onPress={handleAlbumOptions} hitSlop={15} style={styles.heroBackBtnInner}>
+                    <MoreVertical size={24} color="#fff" />
+                </TouchableOpacity>
+            </Animated.View>
             <MediaGrid
                 ref={gridRef}
                 media={media}
+                groupByDate={shouldGroupByDate}
                 selectionMode={selectionMode}
                 selectedIds={selectedIds}
                 onPressItem={handlePressItem}
@@ -365,9 +399,9 @@ const AlbumDetailScreen = () => {
                 ListHeaderComponent={
                     <View>
                         {/* Hero */}
-                        <Animated.View style={[styles.hero, { opacity: heroOpacity }]}>
+                        <Animated.View style={[styles.hero, { opacity: heroOpacity, marginBottom: 2 }]}>
                             {coverUrl ? (
-                                <RemoteImage uri={coverUrl} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                                <RemoteImage uri={coverUrl.replace('/thumbnail/', '/preview/')} style={StyleSheet.absoluteFill} resizeMode="cover" />
                             ) : (
                                 <View style={[StyleSheet.absoluteFill, styles.heroPlaceholderBg]}>
                                     <ImageIcon size={80} color="rgba(255,255,255,0.3)" />
@@ -376,13 +410,29 @@ const AlbumDetailScreen = () => {
                             <View style={styles.heroGradient} />
                             <View style={[styles.heroContent, { paddingBottom: 20, paddingTop: insets.top + 56 }]}>
                                 <Text style={styles.heroAlbumName}>{albumName}</Text>
-                                <Text style={styles.heroCount}>{loading ? '…' : `${media.length} items`}</Text>
+                                <Text style={styles.heroCount}>
+                                    {loading ? '…' : (
+                                        (() => {
+                                            const countStr = `${media.length} items`;
+                                            if (media.length === 0) return countStr;
+
+                                            // Calculate min and max dates
+                                            let minTime = Infinity;
+                                            let maxTime = -Infinity;
+                                            for (const m of media) {
+                                                const t = mediaDate(m).getTime();
+                                                if (t < minTime) minTime = t;
+                                                if (t > maxTime) maxTime = t;
+                                            }
+
+                                            if (minTime === Infinity) return countStr;
+                                            const rangeStr = formatDateRange(new Date(minTime), new Date(maxTime));
+                                            return `${rangeStr} • ${countStr}`;
+                                        })()
+                                    )}
+                                </Text>
                             </View>
-                            <TouchableOpacity style={styles.heroCoverEditBtn} onPress={handleSetCoverFromHero}>
-                                <Camera size={18} color="#fff" />
-                            </TouchableOpacity>
                         </Animated.View>
-                        {listHeader}
                     </View>
                 }
                 ListEmptyComponent={
@@ -391,7 +441,7 @@ const AlbumDetailScreen = () => {
                             <ImageIcon size={64} color="#ccc" style={styles.emptyIcon} />
                             <Text style={styles.emptyTitle}>Empty Album</Text>
                         </View>
-                    ) : null
+                    ) : undefined
                 }
             />
 
@@ -468,7 +518,7 @@ const AlbumDetailScreen = () => {
                 assets={uploadAssets}
                 albumId={albumId}
                 onClose={() => setUploadModalVisible(false)}
-                onUploadComplete={() => {}}
+                onUploadComplete={() => { }}
             />
 
             <SelectAlbumModal
@@ -490,6 +540,45 @@ const AlbumDetailScreen = () => {
                     onConfirm={handleBulkDateChange}
                     onCancel={() => setBulkDatePickerVisible(false)}
                 />
+            </Modal>
+            {/* Album Options Menu */}
+            <Modal visible={albumMenuVisible} transparent animationType="fade" onRequestClose={() => setAlbumMenuVisible(false)}>
+                <TouchableWithoutFeedback onPress={() => setAlbumMenuVisible(false)}>
+                    <View style={StyleSheet.absoluteFill}>
+                        <View style={[styles.menuContainer, { top: insets.top + 48, right: 16 }]}>
+                            <TouchableOpacity style={styles.menuItem} onPress={() => { setAlbumMenuVisible(false); setRenameAlbumNameInput(albumName); setRenameModalVisible(true); }}>
+                                <Text style={styles.menuItemText}>Rename Album</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.menuItem} onPress={handleDeleteAlbum}>
+                                <Text style={[styles.menuItemText, { color: '#ef4444' }]}>Delete Album</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+            
+            {/* Rename Modal */}
+            <Modal visible={renameModalVisible} transparent animationType="fade" onRequestClose={() => setRenameModalVisible(false)}>
+                <View style={ds.overlay}>
+                    <View style={ds.sheet}>
+                        <Text style={ds.title}>Rename Album</Text>
+                        <TextInput
+                            style={ds.input}
+                            placeholder="Album Name"
+                            value={renameAlbumNameInput}
+                            onChangeText={setRenameAlbumNameInput}
+                            autoFocus
+                        />
+                        <View style={ds.actions}>
+                            <Pressable style={ds.cancelBtn} onPress={() => setRenameModalVisible(false)}>
+                                <Text style={ds.cancelText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={ds.confirmBtn} onPress={handleRenameAlbum}>
+                                <Text style={ds.confirmText}>Save</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
             </Modal>
         </View>
     );
@@ -597,6 +686,31 @@ const styles = StyleSheet.create({
         left: 16,
         zIndex: 21,
     },
+    heroOptionsBtn: {
+        position: 'absolute',
+        right: 16,
+        zIndex: 21,
+    },
+    menuContainer: {
+        position: 'absolute',
+        backgroundColor: '#2a2a3e',
+        borderRadius: 8,
+        paddingVertical: 8,
+        minWidth: 160,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+    },
+    menuItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+    },
+    menuItemText: {
+        color: '#fff',
+        fontSize: 16,
+    },
     heroBackBtnInner: {
         width: 40,
         height: 40,
@@ -624,20 +738,24 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        height: 180,
-        backgroundColor: 'rgba(0,0,0,0.55)',
+        height: 100,
+        // backgroundColor: 'rgba(0, 0, 0, 0.35)',
     },
-    heroContent: { paddingHorizontal: 20 },
+    heroContent: { paddingHorizontal: 20, alignItems: 'center' },
     heroAlbumName: {
-        fontSize: 32,
-        fontWeight: '800',
+        fontSize: 38,
+        fontWeight: Platform.OS === 'ios' ? '600' : 'normal',
+        fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
         color: '#fff',
-        letterSpacing: -0.5,
         textShadowColor: 'rgba(0,0,0,0.4)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        includeFontPadding: false,
     },
-    heroCount: { fontSize: 15, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+    heroCount: { fontSize: 15, color: 'rgba(255,255,255,0.8)', marginTop: 4, textAlign: 'center' },
     heroCoverEditBtn: {
         position: 'absolute',
         right: 16,

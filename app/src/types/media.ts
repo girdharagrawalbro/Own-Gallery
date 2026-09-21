@@ -29,6 +29,10 @@ export interface Media {
   content_url: string;
   /** original file with Content-Disposition: attachment */
   download_url: string;
+
+  // UI-only properties for local media integration
+  _isLocal?: boolean;
+  _backupStatus?: 'backed_up' | 'not_backed_up' | 'backing_up';
 }
 
 export interface PaginatedMedia {

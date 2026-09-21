@@ -13,9 +13,13 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import {
+    CloudOff,
+    Cloud,
     Download,
     FolderPlus,
     Heart,
@@ -32,6 +36,7 @@ import { bulkFavorite, bulkTrash, bulkUpdateTakenAt, downloadMediaToDevice, getM
 import { Media } from '../../types/media';
 import { useAuth } from '../../context/AuthContext';
 import { useUploadActions } from '../../context/UploadContext';
+import { useLocalMedia } from '../../hooks/useLocalMedia';
 import { mediaDate } from '../../utils/format';
 import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from './MediaViewer';
@@ -54,12 +59,15 @@ const mergeMedia = (prev: Media[], fresh: Media[]): Media[] => {
 };
 
 const GalleryScreen = () => {
+    const navigation = useNavigation<StackNavigationProp<any>>();
     const { logout, user } = useAuth();
     const { completedVersion } = useUploadActions();
     const insets = useSafeAreaInsets();
     const gridRef = useRef<MediaGridHandle>(null);
 
     const [media, setMedia] = useState<Media[]>([]);
+    const { localMedia, fetchNextPage: fetchNextLocalPage, refresh: refreshLocalMedia } = useLocalMedia();
+
     const [loadState, setLoadState] = useState<LoadState>('loading');
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -75,6 +83,31 @@ const GalleryScreen = () => {
     const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
     const [ordering, setOrdering] = useState<SortOrdering>('date');
     const [bulkDatePickerVisible, setBulkDatePickerVisible] = useState(false);
+
+    const combinedMedia = React.useMemo(() => {
+        if (ordering !== 'date') return media; // Only mix local in date sorting
+        
+        const byFilenameSize = new Map<string, Media>();
+        media.forEach(m => byFilenameSize.set(`${m.filename}_${m.file_size}`, m));
+        
+        const merged = [...media];
+        for (const local of localMedia) {
+            // Very simple deduplication:
+            const key = `${local.filename}_${local.file_size}`;
+            if (byFilenameSize.has(key)) {
+                // Already backed up, maybe mark the cloud item as also local?
+                const cloudItem = byFilenameSize.get(key)!;
+                cloudItem._backupStatus = 'backed_up';
+            } else {
+                // Not backed up
+                local._backupStatus = 'not_backed_up';
+                merged.push(local);
+            }
+        }
+        
+        // Sort newest first
+        return merged.sort((a, b) => mediaDate(b).getTime() - mediaDate(a).getTime());
+    }, [media, localMedia, ordering]);
 
     const selectionAnim = useRef(new Animated.Value(0)).current;
 
@@ -172,9 +205,12 @@ const GalleryScreen = () => {
         searchRef.current = searchQuery;
         const delay = firstLoad.current ? 0 : 350;
         firstLoad.current = false;
-        const timeout = setTimeout(() => fetchPage(1, 'initial'), delay);
+        const timeout = setTimeout(() => {
+            fetchPage(1, 'initial');
+            fetchNextLocalPage(true);
+        }, delay);
         return () => clearTimeout(timeout);
-    }, [searchQuery, fetchPage]);
+    }, [searchQuery, fetchPage, fetchNextLocalPage]);
 
     // Re-fetch from scratch when ordering changes.
     useEffect(() => {
@@ -193,15 +229,37 @@ const GalleryScreen = () => {
         }
     }, [completedVersion, fetchPage]);
 
+    // Poll AutoBackup status to refresh media when background uploads complete
+    const [lastBackupCount, setLastBackupCount] = useState<number | null>(null);
+    useEffect(() => {
+        import('../../services/AutoBackupService').then(({ isAutoBackupAvailable, getAutoBackupStatus }) => {
+            if (!isAutoBackupAvailable) return;
+            const timer = setInterval(async () => {
+                const status = await getAutoBackupStatus();
+                if (status) {
+                    setLastBackupCount(prev => {
+                        if (prev !== null && status.backedUpCount > prev) {
+                            fetchPage(1, 'silent');
+                        }
+                        return status.backedUpCount;
+                    });
+                }
+            }, 5000);
+            return () => clearInterval(timer);
+        });
+    }, [fetchPage]);
+
     const onRefresh = useCallback(() => {
         fetchPage(1, 'refresh');
-    }, [fetchPage]);
+        refreshLocalMedia();
+    }, [fetchPage, refreshLocalMedia]);
 
     const onEndReached = useCallback(() => {
         if (!busyRef.current && hasMoreRef.current) {
             fetchPage(pageRef.current + 1, 'more');
         }
-    }, [fetchPage]);
+        fetchNextLocalPage();
+    }, [fetchPage, fetchNextLocalPage]);
 
     const handleUpload = async () => {
         const result = await launchImageLibrary({
@@ -256,11 +314,11 @@ const GalleryScreen = () => {
 
     const handleViewerClose = useCallback((lastIndex: number) => {
         setViewerVisible(false);
-        const item = media[lastIndex];
+        const item = combinedMedia[lastIndex];
         if (item) {
             requestAnimationFrame(() => gridRef.current?.scrollToMedia(item.id));
         }
-    }, [media]);
+    }, [combinedMedia]);
 
     const handleMediaUpdated = useCallback((updated: Media) => {
         setMedia(prev => prev.map(m => (m.id === updated.id ? updated : m)));
@@ -378,9 +436,9 @@ const GalleryScreen = () => {
                             <X size={18} color="#5f6368" />
                         </Pressable>
                     ) : (
-                        <View style={styles.profileAvatar}>
+                        <TouchableOpacity style={styles.profileAvatar} onPress={() => navigation.navigate('Settings')}>
                             <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
-                        </View>
+                        </TouchableOpacity>
                     )}
                 </View>
             </View>
@@ -408,16 +466,26 @@ const GalleryScreen = () => {
             )}
             <MediaGrid
                 ref={gridRef}
-                media={media}
+                media={combinedMedia}
                 selectionMode={selectionMode}
                 selectedIds={selectedIds}
                 onPressItem={handlePressItem}
                 onLongPressItem={handleLongPressItem}
                 onToggleGroup={toggleDateGroup}
+                onScroll={Keyboard.dismiss}
+                onEndReached={onEndReached}
+                renderCellOverlay={(item) => {
+                    if (!item._backupStatus) return null;
+                    return (
+                        <View style={styles.backupIconContainer}>
+                            {item._backupStatus === 'backed_up' && <Cloud size={14} color="#fff" />}
+                            {item._backupStatus === 'not_backed_up' && <CloudOff size={14} color="#fff" />}
+                        </View>
+                    );
+                }}
                 loading={loadState === 'loading'}
                 refreshing={loadState === 'refreshing'}
                 onRefresh={onRefresh}
-                onEndReached={onEndReached}
                 loadingMore={loadState === 'loadingMore'}
                 ListEmptyComponent={emptyComponent}
                 bottomPadding={selectionMode ? 180 : 100}
@@ -480,7 +548,7 @@ const GalleryScreen = () => {
 
             <MediaViewer
                 visible={viewerVisible}
-                media={media}
+                media={combinedMedia}
                 initialIndex={selectedIndex}
                 onClose={handleViewerClose}
                 onMediaUpdated={handleMediaUpdated}
@@ -609,6 +677,18 @@ const styles = StyleSheet.create({
         height: 48,
     },
     searchIcon: { marginRight: 12 },
+    searchBarFocused: {
+        flex: 1,
+        marginLeft: 0,
+    },
+    backupIconContainer: {
+        position: 'absolute',
+        bottom: 4,
+        right: 4,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 12,
+        padding: 4,
+    },
     searchInput: {
         flex: 1,
         fontSize: 16,

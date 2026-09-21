@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Folder, Plus, Search } from 'lucide-react-native';
+import { Folder, Plus, Search, MoreVertical } from 'lucide-react-native';
 import RemoteImage from '../../components/RemoteImage';
 import { getAlbums, createAlbum, deleteAlbum, updateAlbum } from '../../api/albums';
 import { Album } from '../../types/album';
@@ -138,6 +138,15 @@ const AlbumsScreen = () => {
                         <Folder size={40} color="#ccc" />
                     </View>
                 )}
+                <TouchableOpacity
+                    style={styles.cardOptionsBtn}
+                    onPress={() => handleAlbumLongPress(item)}
+                    hitSlop={10}
+                >
+                    <View style={styles.cardOptionsBg}>
+                        <MoreVertical size={20} color="#fff" />
+                    </View>
+                </TouchableOpacity>
             </View>
             <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
             <Text style={styles.mediaCount}>{item.media_count} items</Text>
@@ -270,9 +279,23 @@ const styles = StyleSheet.create({
 
     listContent: { paddingHorizontal: 16, paddingTop: 8 },
     albumCard: { width: CELL, marginBottom: 24, marginHorizontal: 8 },
-    coverContainer: { width: CELL, height: CELL, borderRadius: 16, overflow: 'hidden', backgroundColor: '#f1f3f4', marginBottom: 12 },
+    coverContainer: { width: CELL, height: CELL, borderRadius: 30, overflow: 'hidden', backgroundColor: '#f1f3f4', marginBottom: 12 },
     coverImage: { width: '100%', height: '100%' },
     placeholderCover: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    cardOptionsBtn: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        zIndex: 10,
+    },
+    cardOptionsBg: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     albumName: { fontSize: 16, fontWeight: '500', color: '#3c4043' },
     mediaCount: { fontSize: 13, color: '#5f6368', marginTop: 4 },
 
