@@ -170,6 +170,8 @@ export const api = {
     apiClient
       .get<Paginated<Media>>('/media/', { params: { ...filters, page, page_size: pageSize } })
       .then((r) => r.data),
+  getMemories: () =>
+    apiClient.get<{ memories: any[] }>('/media/memories/').then((r) => r.data.memories),
   timeline: (filters: MediaFilters) =>
     apiClient.get<{ months: TimelineMonth[] }>('/media/timeline/', { params: filters }).then((r) => r.data.months),
   getMedia: (id: number, signal?: AbortSignal) =>

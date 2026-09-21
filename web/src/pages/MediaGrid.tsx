@@ -8,6 +8,7 @@ import type { PageFetcher } from '../hooks/useMediaCollection';
 import { mediaAddedDate } from '../utils/dateUtils';
 import type { MediaOrdering } from '../types/media';
 import type { Media } from '../types/media';
+import MemoriesCarousel from '../components/MemoriesCarousel';
 
 const makeFetcher =
   (ordering: MediaOrdering): PageFetcher =>
@@ -46,25 +47,36 @@ const MediaGrid = () => {
   }, []);
 
   const header = (
-    <div className="sort-toggle" role="group" aria-label="Sort order">
-      <button
-        id="sort-date-taken"
-        className={`sort-toggle-btn${ordering === 'date' ? ' active' : ''}`}
-        onClick={() => handleOrdering('date')}
-        aria-pressed={ordering === 'date'}
-      >
-        <CalendarDays size={14} />
-        Date taken
-      </button>
-      <button
-        id="sort-recently-added"
-        className={`sort-toggle-btn${ordering === 'added' ? ' active' : ''}`}
-        onClick={() => handleOrdering('added')}
-        aria-pressed={ordering === 'added'}
-      >
-        <Clock size={14} />
-        Recently added
-      </button>
+    <div className="grid-header">
+      <MemoriesCarousel />
+      <div className="filters-row">
+        <div className="pill-filters">
+          <button className="pill-btn active">All</button>
+          <button className="pill-btn">Videos</button>
+          <button className="pill-btn">Screenshots</button>
+          <button className="pill-btn">Selfies</button>
+        </div>
+      </div>
+      <div className="sort-toggle" role="group" aria-label="Sort order">
+        <button
+          id="sort-date-taken"
+          className={`sort-toggle-btn${ordering === 'date' ? ' active' : ''}`}
+          onClick={() => handleOrdering('date')}
+          aria-pressed={ordering === 'date'}
+        >
+          <CalendarDays size={14} />
+          Date taken
+        </button>
+        <button
+          id="sort-recently-added"
+          className={`sort-toggle-btn${ordering === 'added' ? ' active' : ''}`}
+          onClick={() => handleOrdering('added')}
+          aria-pressed={ordering === 'added'}
+        >
+          <Clock size={14} />
+          Recently added
+        </button>
+      </div>
     </div>
   );
 

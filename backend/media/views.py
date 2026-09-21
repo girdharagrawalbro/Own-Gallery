@@ -384,6 +384,50 @@ class MediaViewSet(viewsets.ModelViewSet):
             ]
         })
 
+    @action(detail=False, methods=["get"], url_path="memories")
+    def memories(self, request):
+        queryset = self.get_queryset().filter(status="completed", is_deleted=False)
+        memories = []
+        
+        one_year_ago = timezone.now() - timedelta(days=365)
+        year_ago_media = queryset.filter(
+            taken_at__year=one_year_ago.year, 
+            taken_at__month=one_year_ago.month
+        ).order_by('?')[:5]
+        
+        if year_ago_media.exists():
+            memories.append({
+                "id": "1-year-ago",
+                "title": "1 Year Ago",
+                "subtitle": one_year_ago.strftime("%b %Y"),
+                "cover_url": MediaSerializer(year_ago_media.first(), context={'request': request}).data.get('preview_url'),
+                "media_ids": [m.id for m in year_ago_media]
+            })
+
+        locations = queryset.exclude(location_name="").values('location_name').annotate(count=Count('id')).filter(count__gte=1).order_by('-count')[:3]
+        for i, loc in enumerate(locations):
+            loc_name = loc['location_name']
+            loc_media = queryset.filter(location_name=loc_name).order_by('-taken_at')[:5]
+            if loc_media.exists():
+                memories.append({
+                    "id": f"trip-{i}",
+                    "title": loc_name.split(',')[0], 
+                    "subtitle": loc_media.first().taken_at.strftime("%b %Y"),
+                    "cover_url": MediaSerializer(loc_media.first(), context={'request': request}).data.get('preview_url'),
+                    "media_ids": [m.id for m in loc_media]
+                })
+
+        if not memories and queryset.exists():
+            memories.append({
+                "id": "recent-highlights",
+                "title": "Highlights",
+                "subtitle": "Recent",
+                "cover_url": MediaSerializer(queryset.first(), context={'request': request}).data.get('preview_url'),
+                "media_ids": [m.id for m in queryset[:5]]
+            })
+
+        return Response({"memories": memories})
+
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
         totals = Media.objects.filter(user=request.user, is_deleted=False, status="completed").aggregate(

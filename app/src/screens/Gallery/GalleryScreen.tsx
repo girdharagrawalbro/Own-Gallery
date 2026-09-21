@@ -42,6 +42,7 @@ import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from './MediaViewer';
 import UploadPreviewModal from './UploadPreviewModal';
 import SelectAlbumModal from '../Albums/SelectAlbumModal';
+import CloudIndicator from '../../components/CloudIndicator';
 
 type LoadState = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'error';
 type SortOrdering = 'date' | 'added';
@@ -436,15 +437,29 @@ const GalleryScreen = () => {
                             <X size={18} color="#5f6368" />
                         </Pressable>
                     ) : (
-                        <TouchableOpacity style={styles.profileAvatar} onPress={() => navigation.navigate('Settings')}>
-                            <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <CloudIndicator />
+                            <TouchableOpacity style={styles.profileAvatar} onPress={() => navigation.navigate('Settings')}>
+                                <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
+                            </TouchableOpacity>
+                        </View>
                     )}
                 </View>
             </View>
 
-            {/* Sort toggle */}
-            {!selectionMode && (
+    const renderHeader = () => {
+        if (selectionMode) return null;
+        return (
+            <View style={styles.headerContainer}>
+                <MemoriesCarousel />
+                <View style={styles.filtersScroll}>
+                    <View style={styles.pillFilters}>
+                        <TouchableOpacity style={[styles.pillBtn, styles.pillBtnActive]}><Text style={styles.pillTextActive}>All</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.pillBtn}><Text style={styles.pillText}>Videos</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.pillBtn}><Text style={styles.pillText}>Screenshots</Text></TouchableOpacity>
+                        <TouchableOpacity style={styles.pillBtn}><Text style={styles.pillText}>Selfies</Text></TouchableOpacity>
+                    </View>
+                </View>
                 <View style={styles.sortRow}>
                     <TouchableOpacity
                         style={[styles.sortPill, ordering === 'date' && styles.sortPillActive]}
@@ -463,7 +478,9 @@ const GalleryScreen = () => {
                         <Text style={[styles.sortPillText, ordering === 'added' && styles.sortPillTextActive]}>Recently added</Text>
                     </TouchableOpacity>
                 </View>
-            )}
+            </View>
+        );
+    };
             <MediaGrid
                 ref={gridRef}
                 media={combinedMedia}
@@ -488,6 +505,7 @@ const GalleryScreen = () => {
                 onRefresh={onRefresh}
                 loadingMore={loadState === 'loadingMore'}
                 ListEmptyComponent={emptyComponent}
+                ListHeaderComponent={renderHeader()}
                 bottomPadding={selectionMode ? 180 : 100}
             />
 
@@ -765,6 +783,37 @@ const styles = StyleSheet.create({
     actionBtn: { alignItems: 'center', justifyContent: 'center' },
     actionText: { fontSize: 12, fontWeight: '500', color: '#444', marginTop: 6 },
 
+    headerContainer: {
+        backgroundColor: '#fff',
+        paddingBottom: 8,
+    },
+    filtersScroll: {
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+    },
+    pillFilters: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    pillBtn: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#f1f3f4',
+    },
+    pillBtnActive: {
+        backgroundColor: '#1a73e8',
+    },
+    pillText: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#3c4043',
+    },
+    pillTextActive: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: '#fff',
+    },
     sortRow: {
         flexDirection: 'row',
         gap: 8,

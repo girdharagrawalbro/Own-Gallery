@@ -60,6 +60,10 @@ class Media(models.Model):
     # "client" (device-provided), "exif_local" (EXIF without timezone), "upload".
     taken_at_source = models.CharField(max_length=20, blank=True, default="")
 
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    location_name = models.CharField(max_length=255, blank=True, default="")
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="processing")
     upload_error = models.TextField(null=True, blank=True)
     temp_file_path = models.CharField(max_length=1024, null=True, blank=True)

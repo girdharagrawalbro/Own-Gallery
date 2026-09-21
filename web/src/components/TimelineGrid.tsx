@@ -178,9 +178,15 @@ const TimelineGrid = ({
       for (const group of groups) {
         const ratios = group.items.map((m) => aspectRatioOf(m.width, m.height));
         const layout = computeJustifiedLayout(ratios, { containerWidth: width, targetRowHeight: target, gap: GAP });
+        const locations = group.items.map(m => (m as any).location_name).filter(Boolean);
+        let locationStr = '';
+        if (locations.length > 0) {
+          locationStr = locations[0].split(',')[0];
+        }
+        
         sections.push({
           key: group.key,
-          title: formatDayHeader(group.date, now),
+          title: formatDayHeader(group.date, now) + (locationStr ? ` · ${locationStr}` : ''),
           items: group.items,
           rows: layout.rows.map((row) => ({
             height: row.height,

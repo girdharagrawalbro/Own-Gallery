@@ -154,6 +154,41 @@ def exif_taken_at(img):
         return None, None
 
 
+def exif_location(img):
+    exif = img.getexif()
+    if not exif:
+        return None, None
+    gps_info = exif.get_ifd(0x8825)
+    if not gps_info:
+        return None, None
+
+    def convert_to_degrees(value):
+        try:
+            d = float(value[0])
+            m = float(value[1])
+            s = float(value[2])
+            return d + (m / 60.0) + (s / 3600.0)
+        except (TypeError, ValueError, IndexError, ZeroDivisionError):
+            return 0.0
+
+    try:
+        lat = convert_to_degrees(gps_info[2])
+        lat_ref = gps_info.get(1, 'N')
+        if lat_ref != 'N':
+            lat = -lat
+        
+        lon = convert_to_degrees(gps_info[4])
+        lon_ref = gps_info.get(3, 'E')
+        if lon_ref != 'E':
+            lon = -lon
+            
+        if lat == 0.0 and lon == 0.0:
+            return None, None
+        return lat, lon
+    except (KeyError, TypeError, ValueError):
+        return None, None
+
+
 def process_image(path, mime_type):
     """Return metadata and generated file paths for an image.
 
@@ -162,6 +197,7 @@ def process_image(path, mime_type):
     """
     result = {
         "width": None, "height": None, "taken_at": None, "taken_at_source": None,
+        "latitude": None, "longitude": None, "location_name": "",
         "thumbnail_path": None, "preview_path": None, "preview_width": None, "preview_height": None,
     }
     # Cap decompressed image size: a 100MP image needs ~300 MB RAM at 3 bytes/px.
@@ -169,6 +205,23 @@ def process_image(path, mime_type):
     Image.MAX_IMAGE_PIXELS = 100_000_000
     with Image.open(path) as original:
         result["taken_at"], result["taken_at_source"] = exif_taken_at(original)
+        result["latitude"], result["longitude"] = exif_location(original)
+        
+        if result["latitude"] is not None and result["longitude"] is not None:
+            try:
+                import reverse_geocoder as rg
+                geo_results = rg.search((result["latitude"], result["longitude"]))
+                if geo_results:
+                    loc = geo_results[0]
+                    name_parts = []
+                    if loc.get('name'):
+                        name_parts.append(loc['name'])
+                    if loc.get('cc'):
+                        name_parts.append(loc['cc'])
+                    result["location_name"] = ", ".join(name_parts)
+            except Exception as e:
+                pass
+
         is_animated = getattr(original, "is_animated", False)
         img = ImageOps.exif_transpose(original)
         img.load()

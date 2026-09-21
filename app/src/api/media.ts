@@ -37,6 +37,11 @@ export const getMedia = async ({
   return response.data;
 };
 
+export const getMemories = async (): Promise<any[]> => {
+  const response = await api.get<{ memories: any[] }>('/media/memories/');
+  return response.data.memories;
+};
+
 export const toggleFavorite = async (id: number, isFavorite: boolean): Promise<Media> => {
   const response = await api.patch<Media>(`/media/${id}/`, {
     is_favorite: isFavorite,

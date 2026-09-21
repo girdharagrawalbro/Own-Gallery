@@ -29,6 +29,10 @@ class MediaSerializer(serializers.ModelSerializer):
             "status",
             "upload_error",
             "taken_at",
+            "latitude",
+            "longitude",
+            "location_name",
+            "deleted_at",
             "created_at",
             "updated_at",
         ]

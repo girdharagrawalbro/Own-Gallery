@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Trash2, Upload, User, X } from 'lucide-react';
+import { Cloud, CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Trash2, Upload, User, X } from 'lucide-react';
 import { useAuth } from '../context/auth';
 import { useUploadActions } from '../context/uploads';
 import SettingsModal from './SettingsModal';
@@ -173,6 +173,10 @@ const Layout = () => {
           </div>
           <SearchBox />
           <div className="top-actions">
+            <div className="cloud-indicator" title="Cloud backup complete">
+              <Cloud size={22} className="synced" />
+              <span className="status-dot"></span>
+            </div>
             <button className="btn-upload" onClick={openFilePicker} title="Upload photos and videos">
               <Upload size={18} />
               <span>Upload</span>

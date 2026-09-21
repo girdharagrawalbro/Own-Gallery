@@ -2010,3 +2010,166 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Lumina UI Revamp Styles                                             */
+/* ------------------------------------------------------------------ */
+
+.cloud-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--text-secondary);
+  margin-right: 8px;
+}
+
+.cloud-indicator.uploading {
+  color: var(--accent-color);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.status-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background-color: #2196F3;
+  border-radius: 50%;
+  border: 2px solid var(--bg-color);
+}
+
+.memories-section {
+  padding: 12px 0 24px;
+}
+
+.memories-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.memories-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.memories-view-all {
+  font-size: 14px;
+  color: var(--accent-color);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.memories-carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none; /* Firefox */
+}
+
+.memories-carousel::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+.memory-card {
+  position: relative;
+  width: 140px;
+  height: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex: none;
+  background: var(--placeholder);
+  cursor: pointer;
+  transition: transform var(--transition-speed);
+}
+
+.memory-card:hover {
+  transform: scale(1.02);
+}
+
+.memory-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.memory-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 60%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px;
+  color: #fff;
+}
+
+.memory-subtitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+  margin-bottom: 4px;
+}
+
+.memory-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.grid-header {
+  margin-bottom: 16px;
+}
+
+.filters-row {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+}
+
+.filters-row::-webkit-scrollbar {
+  display: none;
+}
+
+.pill-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.pill-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+
+.pill-btn:hover {
+  background: var(--bg-hover);
+}
+
+.pill-btn.active {
+  background: var(--accent-color);
+  color: #fff;
+}

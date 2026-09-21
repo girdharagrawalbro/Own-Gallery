@@ -384,10 +384,15 @@ const MediaGrid = ({
       const flush = () => {
         if (bucket.length === 0) { return; }
         const d = mediaDate(bucket[0]);
+        let locationStr = '';
+        const locations = bucket.map(m => m.location_name).filter(Boolean);
+        if (locations.length > 0) {
+          locationStr = locations[0].split(',')[0];
+        }
         data.push({
           type: 'header',
           key: `header-${currentKey}`,
-          title: formatDayTitle(d, now),
+          title: formatDayTitle(d, now) + (locationStr ? ` · ${locationStr}` : ''),
           ids: bucket.map(m => m.id),
         });
         buildRows(bucket, columns, data, width, GRID_GAP);

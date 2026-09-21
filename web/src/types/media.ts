@@ -14,6 +14,7 @@ export interface Media {
   status: MediaStatus;
   upload_error: string | null;
   taken_at: string;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
   /** Signed absolute URLs: no auth header or token param needed. */
