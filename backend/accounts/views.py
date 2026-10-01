@@ -36,6 +36,7 @@ class ChangePasswordView(APIView):
             return Response({"detail": "Password updated successfully."}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+import os
 import requests
 from django.conf import settings
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -55,8 +56,8 @@ class GoogleLoginView(APIView):
         token_url = "https://oauth2.googleapis.com/token"
         data = {
             "code": auth_code,
-            "client_id": getattr(settings, "GOOGLE_CLIENT_ID", ""),
-            "client_secret": getattr(settings, "GOOGLE_CLIENT_SECRET", ""),
+            "client_id": getattr(settings, "GOOGLE_CLIENT_ID", "") or os.getenv("GOOGLE_CLIENT_ID", ""),
+            "client_secret": getattr(settings, "GOOGLE_CLIENT_SECRET", "") or os.getenv("GOOGLE_CLIENT_SECRET", ""),
             "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
         }

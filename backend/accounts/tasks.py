@@ -16,8 +16,8 @@ def refresh_google_token(integration):
     token_url = "https://oauth2.googleapis.com/token"
     data = {
         "refresh_token": integration.refresh_token,
-        "client_id": getattr(settings, "GOOGLE_CLIENT_ID", ""),
-        "client_secret": getattr(settings, "GOOGLE_CLIENT_SECRET", ""),
+        "client_id": getattr(settings, "GOOGLE_CLIENT_ID", "") or os.getenv("GOOGLE_CLIENT_ID", ""),
+        "client_secret": getattr(settings, "GOOGLE_CLIENT_SECRET", "") or os.getenv("GOOGLE_CLIENT_SECRET", ""),
         "grant_type": "refresh_token",
     }
     r = requests.post(token_url, data=data)
