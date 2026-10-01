@@ -9,7 +9,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        libpq5 \
        ffmpeg \
+       # dlib / face_recognition build deps
+       cmake \
+       build-essential \
+       libopenblas-dev \
+       liblapack-dev \
     && rm -rf /var/lib/apt/lists/*
+
 
 COPY requirements.txt .
 
@@ -24,4 +30,4 @@ EXPOSE 8000
 ENV GUNICORN_WORKERS=2 \
     GUNICORN_THREADS=24
 
-CMD ["sh", "-c", "exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers ${GUNICORN_WORKERS} --threads ${GUNICORN_THREADS} --timeout 120 --graceful-timeout 30 --keep-alive 15 --access-logfile -"]
+CMD ["sh", "-c", "python manage.py migrate && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers ${GUNICORN_WORKERS} --threads ${GUNICORN_THREADS} --timeout 120 --graceful-timeout 30 --keep-alive 15 --access-logfile -"]

@@ -2173,3 +2173,178 @@ button:disabled {
   background: var(--accent-color);
   color: #fff;
 }
+
+/* ================================================================
+   People & Pets
+   ================================================================ */
+
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 28px 20px;
+  padding: 16px 0 40px;
+}
+
+.people-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.people-card:hover .people-avatar-wrapper {
+  transform: scale(1.06);
+}
+
+.people-avatar-wrapper {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  transition: transform 0.18s ease;
+  background: var(--bg-secondary);
+}
+
+.people-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.people-avatar-crop {
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+}
+
+.people-avatar-placeholder {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.people-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.people-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Skeleton */
+.people-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.people-avatar-shimmer {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+}
+
+.people-name-shimmer {
+  width: 70px;
+  height: 12px;
+  border-radius: 6px;
+}
+
+/* Person Detail Page */
+.person-detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.person-detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 20px 0;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.person-detail-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 16px;
+}
+
+.person-detail-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.person-name-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.person-name-btn:hover {
+  background: var(--bg-hover);
+}
+
+.person-name-btn h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.person-name-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 2px solid var(--accent-color);
+  padding-bottom: 2px;
+}
+
+.person-name-input {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  outline: none;
+  min-width: 160px;
+}
+
+.person-detail-count {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}

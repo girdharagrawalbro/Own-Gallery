@@ -1,28 +1,60 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
+    Animated,
     Dimensions,
     FlatList,
     Pressable,
     RefreshControl,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity,
     View,
-    Modal,
-    ToastAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Folder, Plus, Search, MoreVertical } from 'lucide-react-native';
+import {
+    ArrowLeft,
+    Folder,
+    Plus,
+    Search,
+    X,
+    LayoutGrid,
+    List as ListIcon,
+    ArrowUpDown,
+    Check,
+} from 'lucide-react-native';
 import RemoteImage from '../../components/RemoteImage';
-import { getAlbums, createAlbum, deleteAlbum, updateAlbum } from '../../api/albums';
+import { getAlbums } from '../../api/albums';
 import { Album } from '../../types/album';
+import { colors, radii, elevation, ripple } from './theme';
+import { BottomSheetMenu, SkeletonGrid, haptics } from './AlbumUIKit';
 
 const { width } = Dimensions.get('window');
-const CELL = (width - 48) / 2; // 2 columns with some padding
+const CELL = (width - 48) / 2;
+
+type SortOption = 'name' | 'newest' | 'oldest';
+type ViewMode = 'grid' | 'list';
+
+const SORT_LABELS: Record<SortOption, string> = {
+    name: 'Name',
+    newest: 'Newest first',
+    oldest: 'Oldest first',
+};
+
+// Subtle staggered rise-and-fade for grid/list items as they first appear.
+const FadeInItem = ({ index, children }: { index: number; children: React.ReactNode }) => {
+    const opacity = useRef(new Animated.Value(0)).current;
+    const translateY = useRef(new Animated.Value(10)).current;
+    useEffect(() => {
+        const delay = Math.min(index, 8) * 30;
+        Animated.parallel([
+            Animated.timing(opacity, { toValue: 1, duration: 220, delay, useNativeDriver: true }),
+            Animated.spring(translateY, { toValue: 0, delay, useNativeDriver: true, damping: 16, stiffness: 180 }),
+        ]).start();
+    }, []);
+    return <Animated.View style={{ opacity, transform: [{ translateY }] }}>{children}</Animated.View>;
+};
 
 const AlbumsScreen = () => {
     const navigation = useNavigation<any>();
@@ -32,15 +64,18 @@ const AlbumsScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    const [createModalVisible, setCreateModalVisible] = useState(false);
-    const [newAlbumName, setNewAlbumName] = useState('');
-    const [renameModalVisible, setRenameModalVisible] = useState(false);
-    const [renameAlbumId, setRenameAlbumId] = useState<number | null>(null);
-    const [renameAlbumName, setRenameAlbumName] = useState('');
+    const [searchVisible, setSearchVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const searchAnim = useRef(new Animated.Value(0)).current;
+
+    const [sortBy, setSortBy] = useState<SortOption>('newest');
+    const [sortMenuVisible, setSortMenuVisible] = useState(false);
+    const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
     const fetchAlbumsList = useCallback(async () => {
         try {
+            // TODO(api/albums.ts): extend getAlbums to accept a `sort` param for server-side
+            // sorting once the dataset is large enough that client-side sort isn't ideal.
             const data = await getAlbums(1, searchQuery);
             setAlbums(data.results);
         } catch (err) {
@@ -52,9 +87,7 @@ const AlbumsScreen = () => {
     }, [searchQuery]);
 
     useEffect(() => {
-        const timeout = setTimeout(() => {
-            fetchAlbumsList();
-        }, 300);
+        const timeout = setTimeout(() => { fetchAlbumsList(); }, 300);
         return () => clearTimeout(timeout);
     }, [fetchAlbumsList]);
 
@@ -63,187 +96,182 @@ const AlbumsScreen = () => {
         fetchAlbumsList();
     }, [fetchAlbumsList]);
 
-    const handleCreateAlbum = async () => {
-        if (!newAlbumName.trim()) return;
-        try {
-            await createAlbum(newAlbumName);
-            ToastAndroid.show('Album created', ToastAndroid.SHORT);
-            setCreateModalVisible(false);
-            setNewAlbumName('');
-            onRefresh();
-        } catch {
-            Alert.alert('Error', 'Failed to create album');
+    const sortedAlbums = useMemo(() => {
+        const copy = [...albums];
+        switch (sortBy) {
+            case 'name': copy.sort((a, b) => a.name.localeCompare(b.name)); break;
+            case 'oldest': copy.sort((a, b) => (a.id ?? 0) - (b.id ?? 0)); break;
+            case 'newest':
+            default: copy.sort((a, b) => (b.id ?? 0) - (a.id ?? 0)); break;
         }
+        return copy;
+    }, [albums, sortBy]);
+
+    const openSearch = () => {
+        setSearchVisible(true);
+        Animated.spring(searchAnim, { toValue: 1, useNativeDriver: false, damping: 18, stiffness: 220 }).start();
+    };
+    const closeSearch = () => {
+        Animated.timing(searchAnim, { toValue: 0, duration: 160, useNativeDriver: false }).start(() => {
+            setSearchVisible(false);
+            setSearchQuery('');
+        });
     };
 
-    const handleRenameAlbum = async () => {
-        if (!renameAlbumName.trim() || !renameAlbumId) return;
-        try {
-            await updateAlbum(renameAlbumId, { name: renameAlbumName });
-            ToastAndroid.show('Album renamed', ToastAndroid.SHORT);
-            setRenameModalVisible(false);
-            setRenameAlbumId(null);
-            setRenameAlbumName('');
-            onRefresh();
-        } catch {
-            Alert.alert('Error', 'Failed to rename album');
-        }
+    const goToCreateAlbum = () => {
+        haptics.tap();
+        navigation.navigate('CreateAlbum');
     };
 
-    const handleAlbumLongPress = (album: Album) => {
-        Alert.alert(
-            'Album Options',
-            album.name,
-            [
-                {
-                    text: 'Rename',
-                    onPress: () => {
-                        setRenameAlbumId(album.id);
-                        setRenameAlbumName(album.name);
-                        setRenameModalVisible(true);
-                    }
-                },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => {
-                        Alert.alert('Confirm Delete', `Are you sure you want to delete ${album.name}?`, [
-                            { text: 'Cancel', style: 'cancel' },
-                            {
-                                text: 'Delete', style: 'destructive', onPress: async () => {
-                                    await deleteAlbum(album.id);
-                                    ToastAndroid.show('Album deleted', ToastAndroid.SHORT);
-                                    onRefresh();
-                                }
-                            }
-                        ]);
-                    }
-                },
-                { text: 'Cancel', style: 'cancel' }
-            ]
-        );
-    };
+    const sortMenuItems = (Object.keys(SORT_LABELS) as SortOption[]).map(opt => ({
+        key: opt,
+        label: SORT_LABELS[opt],
+        icon: sortBy === opt ? <Check size={18} color={colors.primary} /> : undefined,
+        onPress: () => setSortBy(opt),
+    }));
 
-    const renderItem = ({ item }: { item: Album }) => (
-        <Pressable
-            style={styles.albumCard}
-            onPress={() => navigation.navigate('AlbumDetail', { albumId: item.id, albumName: item.name, coverUrl: item.cover_url })}
-            onLongPress={() => handleAlbumLongPress(item)}
-        >
-            <View style={styles.coverContainer}>
-                {item.cover_url ? (
-                    <RemoteImage uri={item.cover_url} style={styles.coverImage} />
-                ) : (
-                    <View style={styles.placeholderCover}>
-                        <Folder size={40} color="#ccc" />
-                    </View>
-                )}
-                <TouchableOpacity
-                    style={styles.cardOptionsBtn}
-                    onPress={() => handleAlbumLongPress(item)}
-                    hitSlop={10}
-                >
-                    <View style={styles.cardOptionsBg}>
-                        <MoreVertical size={20} color="#fff" />
-                    </View>
-                </TouchableOpacity>
-            </View>
-            <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.mediaCount}>{item.media_count} items</Text>
-        </Pressable>
+    const renderGridItem = ({ item, index }: { item: Album; index: number }) => (
+        <FadeInItem index={index}>
+            <Pressable
+                style={({ pressed }) => [styles.albumCard, pressed && { opacity: 0.9 }]}
+                android_ripple={ripple}
+                onPress={() => navigation.navigate('AlbumDetail', { albumId: item.id, albumName: item.name, coverUrl: item.cover_url })}
+            >
+                <View style={styles.coverContainer}>
+                    {item.cover_url ? (
+                        <RemoteImage uri={item.cover_url} style={styles.coverImage} />
+                    ) : (
+                        <View style={styles.placeholderCover}><Folder size={40} color="#ccc" /></View>
+                    )}
+                </View>
+                <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.mediaCount}>{item.media_count} items</Text>
+            </Pressable>
+        </FadeInItem>
     );
 
-    if (loading) {
-        return (
-            <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#1a73e8" />
-            </View>
-        );
-    }
+    const renderListItem = ({ item, index }: { item: Album; index: number }) => (
+        <FadeInItem index={index}>
+            <Pressable
+                style={({ pressed }) => [styles.albumRow, pressed && { opacity: 0.9 }]}
+                android_ripple={ripple}
+                onPress={() => navigation.navigate('AlbumDetail', { albumId: item.id, albumName: item.name, coverUrl: item.cover_url })}
+            >
+                <View style={styles.rowCoverContainer}>
+                    {item.cover_url ? (
+                        <RemoteImage uri={item.cover_url} style={styles.coverImage} />
+                    ) : (
+                        <View style={styles.placeholderCover}><Folder size={28} color="#ccc" /></View>
+                    )}
+                </View>
+                <View style={styles.rowTextContainer}>
+                    <Text style={styles.albumName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.mediaCount}>{item.media_count} items</Text>
+                </View>
+            </Pressable>
+        </FadeInItem>
+    );
 
     return (
         <View style={styles.container}>
-            {/* Search Pill Header */}
-            <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16) }]}>
-                <View style={styles.searchPill}>
-                    <Search size={20} color="#777" style={styles.searchIcon} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search albums"
-                        placeholderTextColor="#777"
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        returnKeyType="search"
-                    />
-                </View>
+            <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+
+            <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+                {searchVisible ? (
+                    <Animated.View
+                        style={[
+                            styles.searchPill,
+                            {
+                                opacity: searchAnim,
+                                transform: [{ scaleX: searchAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }],
+                            },
+                        ]}
+                    >
+                        <Search size={20} color={colors.onSurfaceVariant} style={styles.searchIcon} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search albums"
+                            placeholderTextColor={colors.onSurfaceVariant}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            autoFocus
+                            returnKeyType="search"
+                        />
+                        <Pressable onPress={closeSearch} hitSlop={10} android_ripple={{ color: 'rgba(0,0,0,0.08)', radius: 18 }} style={styles.roundIconBtn}>
+                            <X size={18} color={colors.onSurfaceVariant} />
+                        </Pressable>
+                    </Animated.View>
+                ) : (
+                    <>
+                        <Pressable onPress={() => navigation.goBack()} hitSlop={12} android_ripple={{ color: 'rgba(0,0,0,0.08)', radius: 22 }} style={styles.roundIconBtn}>
+                            <ArrowLeft size={24} color={colors.onSurface} />
+                        </Pressable>
+                        <Text style={styles.headerTitle}>Albums</Text>
+                        <View style={styles.headerRightIcons}>
+                            <Pressable onPress={openSearch} hitSlop={12} android_ripple={{ color: 'rgba(0,0,0,0.08)', radius: 22 }} style={styles.roundIconBtn}>
+                                <Search size={22} color={colors.onSurface} />
+                            </Pressable>
+                            <Pressable onPress={goToCreateAlbum} hitSlop={12} android_ripple={{ color: 'rgba(0,0,0,0.08)', radius: 22 }} style={styles.roundIconBtn}>
+                                <Plus size={24} color={colors.onSurface} />
+                            </Pressable>
+                        </View>
+                    </>
+                )}
             </View>
 
-            <FlatList
-                data={albums}
-                numColumns={2}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderItem}
-                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Folder size={64} color="#ccc" style={{ marginBottom: 16 }} />
-                        <Text style={styles.emptyTitle}>No Albums Yet</Text>
-                        <Text style={styles.emptySubtitle}>Tap the + button to create your first album</Text>
-                    </View>
-                }
+            <View style={styles.toolRow}>
+                <Pressable
+                    style={({ pressed }) => [styles.sortBtn, pressed && { opacity: 0.85 }]}
+                    android_ripple={ripple}
+                    onPress={() => setSortMenuVisible(true)}
+                >
+                    <ArrowUpDown size={16} color={colors.onSurfaceVariant} />
+                    <Text style={styles.sortBtnText}>{SORT_LABELS[sortBy]}</Text>
+                </Pressable>
+                <Pressable
+                    style={styles.roundIconBtn}
+                    android_ripple={{ color: 'rgba(0,0,0,0.08)', radius: 20 }}
+                    onPress={() => setViewMode(m => (m === 'grid' ? 'list' : 'grid'))}
+                    hitSlop={10}
+                >
+                    {viewMode === 'grid' ? <ListIcon size={20} color={colors.onSurfaceVariant} /> : <LayoutGrid size={20} color={colors.onSurfaceVariant} />}
+                </Pressable>
+            </View>
+
+            {loading ? (
+                <SkeletonGrid cellSize={CELL} columns={2} rows={3} style={{ paddingTop: 12 }} />
+            ) : (
+                <FlatList
+                    key={viewMode}
+                    data={sortedAlbums}
+                    numColumns={viewMode === 'grid' ? 2 : 1}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={viewMode === 'grid' ? renderGridItem : renderListItem}
+                    contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 32 }]}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={[colors.primary]}
+                            progressBackgroundColor={colors.surface}
+                        />
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}>
+                            <Folder size={64} color="#ccc" style={{ marginBottom: 16 }} />
+                            <Text style={styles.emptyTitle}>No Albums Yet</Text>
+                            <Text style={styles.emptySubtitle}>Tap the + button to create your first album</Text>
+                        </View>
+                    }
+                />
+            )}
+
+            <BottomSheetMenu
+                visible={sortMenuVisible}
+                onClose={() => setSortMenuVisible(false)}
+                title="Sort albums"
+                items={sortMenuItems}
             />
-
-            <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 16, 16) }]} onPress={() => setCreateModalVisible(true)}>
-                <Plus size={28} color="#fff" />
-            </TouchableOpacity>
-
-            <Modal visible={createModalVisible} transparent animationType="fade">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>New Album</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Album Name"
-                            value={newAlbumName}
-                            onChangeText={setNewAlbumName}
-                            autoFocus
-                            placeholderTextColor={'#777'}
-                        />
-                        <View style={styles.modalActions}>
-                            <Pressable style={styles.modalBtn} onPress={() => setCreateModalVisible(false)}>
-                                <Text style={styles.modalBtnText}>Cancel</Text>
-                            </Pressable>
-                            <Pressable style={styles.modalBtn} onPress={handleCreateAlbum}>
-                                <Text style={[styles.modalBtnText, { color: '#1a73e8', fontWeight: 'bold' }]}>Create</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
-            <Modal visible={renameModalVisible} transparent animationType="fade">
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Rename Album</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Album Name"
-                            value={renameAlbumName}
-                            onChangeText={setRenameAlbumName}
-                            autoFocus
-                        />
-                        <View style={styles.modalActions}>
-                            <Pressable style={styles.modalBtn} onPress={() => setRenameModalVisible(false)}>
-                                <Text style={styles.modalBtnText}>Cancel</Text>
-                            </Pressable>
-                            <Pressable style={styles.modalBtn} onPress={handleRenameAlbum}>
-                                <Text style={[styles.modalBtnText, { color: '#1a73e8', fontWeight: 'bold' }]}>Save</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
         </View>
     );
 };
@@ -251,79 +279,44 @@ const AlbumsScreen = () => {
 export default AlbumsScreen;
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+    container: { flex: 1, backgroundColor: colors.surface },
 
-    searchContainer: {
-        paddingHorizontal: 16,
-        paddingBottom: 16,
-        backgroundColor: '#fff',
-    },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 12, backgroundColor: colors.surface },
+    roundIconBtn: { padding: 10, borderRadius: radii.full },
+    headerTitle: { flex: 1, fontSize: 22, fontWeight: '500', color: colors.onSurface, marginLeft: 4 },
+    headerRightIcons: { flexDirection: 'row', alignItems: 'center' },
+
     searchPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f1f3f4', // Google standard search background
-        borderRadius: 24,
-        paddingHorizontal: 16,
-        height: 48,
+        flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceVariant,
+        borderRadius: radii.full, paddingHorizontal: 14, height: 48, marginHorizontal: 4,
     },
-    searchIcon: {
-        marginRight: 12,
+    searchIcon: { marginRight: 10 },
+    searchInput: { flex: 1, fontSize: 16, color: colors.onSurface, paddingVertical: 0 },
+
+    toolRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
+    sortBtn: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 7, paddingHorizontal: 12,
+        borderRadius: radii.full, backgroundColor: colors.surfaceVariant,
     },
-    searchInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#222',
-        paddingVertical: 0,
-    },
+    sortBtnText: { fontSize: 13, color: colors.onSurfaceVariant, fontWeight: '500' },
 
     listContent: { paddingHorizontal: 16, paddingTop: 8 },
-    albumCard: { width: CELL, marginBottom: 24, marginHorizontal: 8 },
-    coverContainer: { width: CELL, height: CELL, borderRadius: 30, overflow: 'hidden', backgroundColor: '#f1f3f4', marginBottom: 12 },
+
+    albumCard: { width: CELL, marginBottom: 24, marginHorizontal: 8, borderRadius: radii.lg },
+    coverContainer: {
+        width: CELL, height: CELL, borderRadius: radii.lg, overflow: 'hidden',
+        backgroundColor: colors.surfaceVariant, marginBottom: 12, ...elevation[1],
+    },
     coverImage: { width: '100%', height: '100%' },
     placeholderCover: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    cardOptionsBtn: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        zIndex: 10,
-    },
-    cardOptionsBg: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    albumName: { fontSize: 16, fontWeight: '500', color: '#3c4043' },
-    mediaCount: { fontSize: 13, color: '#5f6368', marginTop: 4 },
+    albumName: { fontSize: 15, fontWeight: '500', color: colors.onSurface },
+    mediaCount: { fontSize: 13, color: colors.onSurfaceVariant, marginTop: 2 },
 
-    fab: {
-        position: 'absolute',
-        right: 20,
-        width: 56,
-        height: 56,
-        borderRadius: 16,
-        backgroundColor: '#1a73e8', // Google Blue
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 6,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.25,
-        shadowRadius: 5
-    },
+    albumRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 16, borderRadius: radii.md },
+    rowCoverContainer: { width: 56, height: 56, borderRadius: radii.md, overflow: 'hidden', backgroundColor: colors.surfaceVariant, marginRight: 16, ...elevation[1] },
+    rowTextContainer: { flex: 1 },
 
     emptyState: { alignItems: 'center', paddingTop: 100 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
-    emptySubtitle: { fontSize: 15, color: '#5f6368', textAlign: 'center' },
-
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-    modalContent: { width: '80%', backgroundColor: '#fff', borderRadius: 16, padding: 24 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#3c4043' },
-    input: { borderWidth: 1, borderColor: '#dadce0', borderRadius: 8, padding: 14, fontSize: 16, marginBottom: 24, color: '#222' },
-    modalActions: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#f1f3f4', paddingTop: 16 },
-    modalBtn: { flex: 1, alignItems: 'center', paddingVertical: 8 },
-    modalBtnText: { fontSize: 16, color: '#5f6368', fontWeight: '500' },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.onSurface, marginBottom: 8 },
+    emptySubtitle: { fontSize: 15, color: colors.onSurfaceVariant, textAlign: 'center' },
 });

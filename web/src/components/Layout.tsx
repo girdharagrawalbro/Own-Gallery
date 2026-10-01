@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Cloud, CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Trash2, Upload, User, X } from 'lucide-react';
+import { Cloud, CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Trash2, Upload, User, Users, X } from 'lucide-react';
+
 import { useAuth } from '../context/auth';
 import { useUploadActions } from '../context/uploads';
 import SettingsModal from './SettingsModal';
@@ -12,8 +13,10 @@ const NAV_ITEMS = [
   { to: '/', label: 'Photos', icon: ImageIcon, end: true },
   { to: '/favorites', label: 'Favorites', icon: Heart, end: false },
   { to: '/albums', label: 'Albums', icon: FolderHeart, end: false },
+  { to: '/people', label: 'People', icon: Users, end: false },
   { to: '/trash', label: 'Trash', icon: Trash2, end: false },
 ];
+
 
 const SEARCH_DEBOUNCE_MS = 300;
 

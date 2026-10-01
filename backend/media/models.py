@@ -64,6 +64,9 @@ class Media(models.Model):
     longitude = models.FloatField(null=True, blank=True)
     location_name = models.CharField(max_length=255, blank=True, default="")
 
+    source = models.CharField(max_length=20, default='local') # 'local' or 'google'
+    external_id = models.CharField(max_length=255, null=True, blank=True, db_index=True)
+    
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="processing")
     upload_error = models.TextField(null=True, blank=True)
     temp_file_path = models.CharField(max_length=1024, null=True, blank=True)

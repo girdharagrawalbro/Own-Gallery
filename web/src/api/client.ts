@@ -10,6 +10,8 @@ import type {
   UploadSession,
   User,
 } from '../types/media';
+import type { Person } from '../types/people';
+
 
 export const API_BASE: string =
   import.meta.env.VITE_API_URL || 'https://own-gallery-api.ambitioushill-a50180b1.koreacentral.azurecontainerapps.io/api';
@@ -233,4 +235,38 @@ export const api = {
   completeUpload: (uploadId: string, signal?: AbortSignal) =>
     apiClient.post<Media>(`/media/uploads/${uploadId}/complete/`, null, { signal }).then((r) => r.data),
   cancelUpload: (uploadId: string) => apiClient.delete(`/media/uploads/${uploadId}/`),
+
+  // People & Faces
+  listPeople: (showHidden = false) =>
+    apiClient.get<Person[]>(`/people/${showHidden ? '?hidden=true' : ''}`).then((r) => r.data),
+  getPerson: (id: number | string) =>
+    apiClient.get<Person>(`/people/${id}/`).then((r) => r.data),
+  renamePerson: (id: number | string, name: string) =>
+    apiClient.patch<Person>(`/people/${id}/`, { name }).then((r) => r.data),
+  updatePerson: (id: number | string, data: Partial<{ name: string; is_hidden: boolean }>) =>
+    apiClient.patch<Person>(`/people/${id}/`, data).then((r) => r.data),
+  deletePerson: (id: number | string) => apiClient.delete(`/people/${id}/`),
+  mergePersons: (sourceId: number | string, intoId: number | string) =>
+    apiClient.post<Person>(`/people/${sourceId}/merge/`, { into_id: intoId }).then((r) => r.data),
+  getPersonMedia: (id: number | string, page = 1) =>
+    apiClient
+      .get<Paginated<Media>>(`/people/${id}/media/?page=${page}&page_size=60`)
+      .then((r) => r.data),
+  getMediaFaces: (mediaId: number | string) =>
+    apiClient.get(`/media/${mediaId}/faces/`).then((r) => r.data),
+
+  // Google Integration
+  googleLogin: (authCode: string) =>
+    apiClient.post<AuthTokens>('/auth/google/', { auth_code: authCode }).then((r) => r.data),
+  getGoogleSyncStatus: () =>
+    apiClient.get('/auth/google/sync/').then((r) => r.data),
+  startGoogleSync: () =>
+    apiClient.post('/auth/google/sync/').then((r) => r.data),
+  fetchGooglePhotos: (pageToken?: string) =>
+    apiClient.get(`/auth/google/photos/${pageToken ? `?pageToken=${pageToken}` : ''}`).then((r) => r.data),
+  importGooglePhotos: (mediaItems: any[]) =>
+    apiClient.post('/auth/google/import/', { mediaItems }).then((r) => r.data),
 };
+
+
+

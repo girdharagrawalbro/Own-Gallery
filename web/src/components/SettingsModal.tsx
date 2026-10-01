@@ -12,7 +12,7 @@ interface SettingsModalProps {
 
 const SettingsModal = ({ onClose }: SettingsModalProps) => {
   const { user, updateUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'google'>('profile');
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -72,6 +72,9 @@ const SettingsModal = ({ onClose }: SettingsModalProps) => {
         <button role="tab" aria-selected={activeTab === 'password'} className={activeTab === 'password' ? 'active' : ''} onClick={() => setActiveTab('password')}>
           Security
         </button>
+        <button role="tab" aria-selected={activeTab === 'google'} className={activeTab === 'google' ? 'active' : ''} onClick={() => setActiveTab('google')}>
+          Google Sync
+        </button>
       </div>
 
       <div className="modal-body">
@@ -114,7 +117,42 @@ const SettingsModal = ({ onClose }: SettingsModalProps) => {
             </button>
           </form>
         )}
+
+        {activeTab === 'google' && (
+          <div className="settings-form">
+            <h3>Google Photos Sync</h3>
+            <p style={{ color: '#5f6368', fontSize: 14, marginBottom: 16 }}>
+              Sync your Google Photos directly into Own Gallery. Photos are downloaded and backed up here safely.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={async () => {
+                  try {
+                    await api.startGoogleSync();
+                    alert('Sync started in background.');
+                  } catch (err) {
+                    alert(getErrorMessage(err, 'Failed to start sync. Connect your account first.'));
+                  }
+                }}
+                className="btn-primary"
+              >
+                Auto-Sync All
+              </button>
+              <button
+                onClick={() => {
+                  onClose();
+                  window.location.href = '/google-photos';
+                }}
+                className="btn-primary"
+                style={{ backgroundColor: '#fff', color: '#1a73e8', border: '1px solid #1a73e8' }}
+              >
+                Select manually
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
     </Modal>
   );
 };

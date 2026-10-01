@@ -7,6 +7,8 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),
     path("api/", include("media.urls")),
     path("api/", include("albums.urls")),
+    path("api/", include("people.urls")),
     path("share/<uuid:link_id>/", shared_link_view, name="shared-link"),
     path("share/<uuid:link_id>/content/", shared_link_content, name="shared-link-content"),
 ]
+

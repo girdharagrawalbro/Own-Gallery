@@ -29,6 +29,7 @@ import {
   runAutoBackupNow,
   updateAutoBackupSettings,
 } from '../../services/AutoBackupService';
+import { useNavigation } from '@react-navigation/native';
 import { ChevronRight, LogOut, User, Lock, Edit3 } from 'lucide-react-native';
 
 // Thumbnails/previews are cached natively (Fresco / RCTImageLoader) and videos/shares
@@ -67,9 +68,11 @@ const describeBackup = (status: BackupStatus | null): string => {
 
 const SettingsScreen = () => {
   const { user, setUser, logout } = useAuth();
+  const navigation = useNavigation<any>();
 
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [firstName, setFirstName] = useState(user?.first_name || '');
+
   const [lastName, setLastName] = useState(user?.last_name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -411,6 +414,42 @@ const SettingsScreen = () => {
             </View>
           </View>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>GOOGLE INTEGRATION</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText}>Google Photos Sync</Text>
+                <Text style={styles.subText}>Download and backup Google Photos to Own Gallery</Text>
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={styles.row}
+              onPress={async () => {
+                try {
+                  const { startGoogleSync } = require('../../api/auth');
+                  await startGoogleSync();
+                  ToastAndroid.show('Sync started in background', ToastAndroid.SHORT);
+                } catch (e) {
+                  Alert.alert('Sync failed', 'Please log in with Google first.');
+                }
+              }}
+            >
+              <Text style={[styles.rowText, { color: '#1a73e8' }]}>Auto-Sync All Now</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.row, styles.noBorder]}
+              onPress={() => {
+                navigation.navigate('GooglePhotosPicker');
+              }}
+            >
+              <Text style={[styles.rowText, { color: '#1a73e8' }]}>Select manually</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
 
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>ABOUT</Text>

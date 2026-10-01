@@ -11,9 +11,10 @@ import {
     ToastAndroid,
     Image,
 } from 'react-native';
-
-import { login } from '../../api/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { login, googleLogin } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
+
 
 interface LoginScreenProps {
     onSwitchToRegister: () => void;
@@ -57,7 +58,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
         }
     };
 
+    const handleGoogleLogin = async () => {
+        try {
+            setLoading(true);
+
+            // Configure Google Signin (Client ID should come from .env in reality)
+            GoogleSignin.configure({
+                webClientId: '640643261518-jsev2qn560gbdbeoruj3sirspb9fjcsu.apps.googleusercontent.com',
+                offlineAccess: true,
+                scopes: ['https://www.googleapis.com/auth/photoslibrary.readonly'],
+            });
+
+            await GoogleSignin.hasPlayServices();
+            const userInfo = await GoogleSignin.signIn();
+            const serverAuthCode = userInfo.serverAuthCode;
+
+            if (!serverAuthCode) {
+                throw new Error("No server auth code returned from Google.");
+            }
+
+            await googleLogin(serverAuthCode);
+
+            setAuthenticated(true);
+            ToastAndroid.show('Google Login successful', ToastAndroid.SHORT);
+        } catch (error: any) {
+            console.error('GOOGLE LOGIN ERROR:', error);
+            Alert.alert('Google Login Failed', error.message || 'Something went wrong.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
+
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <Text style={styles.title}>Login to your Gallery</Text>
@@ -92,7 +125,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
                     )}
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <View style={styles.dividerContainer}>
+                    <View style={styles.divider} />
+                    <Text style={styles.dividerText}>OR</Text>
+                    <View style={styles.divider} />
+                </View>
+
+                <TouchableOpacity
+                    style={[styles.button, styles.googleButton]}
+                    onPress={handleGoogleLogin}
+                    disabled={loading}>
+                    <Text style={styles.googleButtonText}>Sign in with Google</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                     style={styles.switchButton}
                     onPress={onSwitchToRegister}>
                     <Text style={styles.switchButtonText}>Don't have an account? Register</Text>
@@ -164,5 +210,30 @@ const styles = StyleSheet.create({
         color: '#1a73e8',
         fontSize: 14,
         fontWeight: '500',
+    },
+    dividerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 24,
+    },
+    divider: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#e0e0e0',
+    },
+    dividerText: {
+        marginHorizontal: 12,
+        color: '#888',
+        fontSize: 14,
+    },
+    googleButton: {
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#ccc',
+    },
+    googleButtonText: {
+        color: '#444',
+        fontSize: 16,
+        fontWeight: '600',
     }
 });

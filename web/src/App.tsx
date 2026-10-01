@@ -7,11 +7,15 @@ import { UploadProvider } from './context/UploadContext';
 import AlbumDetail from './pages/AlbumDetail';
 import Albums from './pages/Albums';
 import Favorites from './pages/Favorites';
+import GooglePhotosPicker from './pages/GooglePhotosPicker';
 import Login from './pages/Login';
 import MediaGrid from './pages/MediaGrid';
+import People from './pages/People';
+import PersonDetail from './pages/PersonDetail';
 import Register from './pages/Register';
 import Search from './pages/Search';
 import TrashGrid from './pages/TrashGrid';
+
 
 const FullPageSpinner = () => (
   <div className="full-page-center">
@@ -47,12 +51,16 @@ const AppRoutes = () => (
       }
     >
       <Route path="/" element={<MediaGrid />} />
-      <Route path="/favorites" element={<Favorites />} />
-      <Route path="/albums" element={<Albums />} />
-      <Route path="/albums/:id" element={<AlbumDetail />} />
-      <Route path="/search" element={<Search />} />
-      <Route path="/trash" element={<TrashGrid />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/favorites" element={<Favorites />} />
+        <Route path="/albums" element={<Albums />} />
+        <Route path="/albums/:id" element={<AlbumDetail />} />
+        <Route path="/people" element={<People />} />
+        <Route path="/people/:id" element={<PersonDetail />} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/trash" element={<TrashGrid />} />
+        <Route path="/google-photos" element={<GooglePhotosPicker />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+
     </Route>
   </Routes>
 );

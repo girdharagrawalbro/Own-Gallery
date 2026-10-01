@@ -6,12 +6,17 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import GalleryScreen from '../screens/Gallery/GalleryScreen';
 import AlbumsScreen from '../screens/Albums/AlbumsScreen';
 import AlbumDetailScreen from '../screens/Albums/AlbumDetailScreen';
+import CreateAlbumScreen from '../screens/Albums/CreateAlbumScreen';
 import FavoritesScreen from '../screens/Favorites/FavoritesScreen';
 import TrashScreen from '../screens/Trash/TrashScreen';
 import SettingsScreen from '../screens/Settings/SettingsScreen';
+import PeopleScreen from '../screens/People/PeopleScreen';
+import PersonDetailScreen from '../screens/People/PersonDetailScreen';
+import GooglePhotosPickerScreen from '../screens/GooglePhotosPickerScreen';
 
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
-import { Image as ImageIcon, Folder, Heart, Trash2, Settings } from 'lucide-react-native';
+
+import { Image as ImageIcon, Folder, Heart, Trash2, Users } from 'lucide-react-native';
 
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator();
@@ -20,85 +25,58 @@ const MainTabs = () => (
   <Tab.Navigator
     screenOptions={({ route }) => ({
       headerShown: false,
-      tabBarStyle: { 
-        backgroundColor: '#fff', 
-        borderTopWidth: 0, 
-        elevation: 8, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: -2 }, 
-        shadowOpacity: 0.1, 
+      tabBarStyle: {
+        backgroundColor: '#fff',
+        borderTopWidth: 0,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
         shadowRadius: 3,
         height: 60,
         paddingBottom: 8,
         paddingTop: 8,
       },
-      tabBarActiveTintColor: '#1a73e8', // Google Blue
-      tabBarInactiveTintColor: '#5f6368', // Google Grey
+      tabBarActiveTintColor: '#1a73e8',
+      tabBarInactiveTintColor: '#5f6368',
       tabBarLabelStyle: {
         fontSize: 12,
         fontWeight: '500',
       },
-      tabBarIcon: ({ color, size, focused }) => {
+      tabBarIcon: ({ color, focused }) => {
         const iconProps = { color, size: 24, strokeWidth: focused ? 2.5 : 2 };
-        if (route.name === 'Gallery') {
-          return <ImageIcon {...iconProps} />;
-        } else if (route.name === 'AlbumsTab') {
-          return <Folder {...iconProps} />;
-        } else if (route.name === 'Favorites') {
-          return <Heart {...iconProps} fill={focused ? color : 'transparent'} />;
-        } else if (route.name === 'Trash') {
-          return <Trash2 {...iconProps} />;
-        }
+        if (route.name === 'Gallery') return <ImageIcon {...iconProps} />;
+        if (route.name === 'AlbumsTab') return <Folder {...iconProps} />;
+        if (route.name === 'PeopleTab') return <Users {...iconProps} />;
+        if (route.name === 'Favorites') return <Heart {...iconProps} fill={focused ? color : 'transparent'} />;
+        if (route.name === 'Trash') return <Trash2 {...iconProps} />;
+        return null;
       },
     })}
   >
-    <Tab.Screen
-      name="Gallery"
-      component={GalleryScreen}
-      options={{ tabBarLabel: 'Gallery' }}
-    />
-    <Tab.Screen
-      name="AlbumsTab"
-      component={AlbumsScreen}
-      options={{ tabBarLabel: 'Albums' }}
-    />
-    <Tab.Screen
-      name="Favorites"
-      component={FavoritesScreen}
-      options={{ tabBarLabel: 'Favorites' }}
-    />
-    <Tab.Screen
-      name="Trash"
-      component={TrashScreen}
-      options={{ tabBarLabel: 'Trash' }}
-    />
+    <Tab.Screen name="Gallery" component={GalleryScreen} options={{ tabBarLabel: 'Gallery' }} />
+    <Tab.Screen name="AlbumsTab" component={AlbumsScreen} options={{ tabBarLabel: 'Albums' }} />
+    <Tab.Screen name="PeopleTab" component={PeopleScreen} options={{ tabBarLabel: 'People' }} />
+    <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ tabBarLabel: 'Favorites' }} />
+    <Tab.Screen name="Trash" component={TrashScreen} options={{ tabBarLabel: 'Trash' }} />
   </Tab.Navigator>
 );
 
-const AppNavigator = () => {
-  return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          <RootStack.Screen name="MainTabs" component={MainTabs} />
-          <RootStack.Screen 
-            name="AlbumDetail" 
-            component={AlbumDetailScreen} 
-            options={{
-              cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-            }}
-          />
-          <RootStack.Screen 
-            name="Settings" 
-            component={SettingsScreen} 
-            options={{
-              cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-            }}
-          />
-        </RootStack.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
-  );
-};
+const slide = { cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS };
+
+const AppNavigator = () => (
+  <SafeAreaProvider>
+    <NavigationContainer>
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Screen name="MainTabs" component={MainTabs} />
+        <RootStack.Screen name="AlbumDetail" component={AlbumDetailScreen} options={slide} />
+        <RootStack.Screen name="CreateAlbum" component={CreateAlbumScreen} options={slide} />
+        <RootStack.Screen name="PersonDetail" component={PersonDetailScreen} options={slide} />
+        <RootStack.Screen name="Settings" component={SettingsScreen} options={slide} />
+        <RootStack.Screen name="GooglePhotosPicker" component={GooglePhotosPickerScreen} options={slide} />
+      </RootStack.Navigator>
+    </NavigationContainer>
+  </SafeAreaProvider>
+);
 
 export default AppNavigator;
