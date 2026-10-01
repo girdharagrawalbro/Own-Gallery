@@ -1,10 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Check, Info, Trash2, Shield, Play, Images, Video, Grid3X3, RotateCcw } from 'lucide-react';
 import { api } from '../api/client';
 import { useMediaCollection } from '../hooks/useMediaCollection';
 import type { PageFetcher } from '../hooks/useMediaCollection';
 import { showToast } from '../utils/toast';
-import { Media } from '../types/media';
+import type { Media } from '../types/media';
 import './Trash.css';
 
 // GET /media/trash/ is not paginated.
