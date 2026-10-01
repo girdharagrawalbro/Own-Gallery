@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, getErrorMessage } from '../api/client';
 import type { Media } from '../types/media';
 import { compareMediaDesc } from '../utils/dateUtils';
@@ -30,6 +31,13 @@ export interface MediaCollection {
   mutate: (items: Media[]) => void;
 }
 
+export interface CachedMediaState {
+  items: Media[];
+  count: number | null;
+  hasMore: boolean;
+  page: number;
+}
+
 const PROCESSING_POLL_MIN_MS = 5000;
 const PROCESSING_POLL_MAX_MS = 60000;
 const MAX_POLLED = 200; // server cap for /media/status/
@@ -44,22 +52,35 @@ function insertSorted(list: Media[], additions: Media[]): Media[] {
  * Paginated media list with optimistic mutations. The fetcher is captured once:
  * remount the owning component (via `key`) when the filters change.
  */
-export function useMediaCollection(fetchPage: PageFetcher): MediaCollection {
-  const [items, setItems] = useState<Media[]>([]);
-  const [count, setCount] = useState<number | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [loadedOnce, setLoadedOnce] = useState(false);
+export function useMediaCollection(fetchPage: PageFetcher, cacheKey?: string): MediaCollection {
+  const queryClient = useQueryClient();
+  const cached = cacheKey
+    ? queryClient.getQueryData<CachedMediaState>(['media-collection', cacheKey])
+    : undefined;
+
+  const [items, setItems] = useState<Media[]>(() => cached?.items ?? []);
+  const [count, setCount] = useState<number | null>(() => cached?.count ?? null);
+  const [hasMore, setHasMore] = useState(() => cached?.hasMore ?? true);
+  const [loading, setLoading] = useState(() => !cached);
+  const [loadedOnce, setLoadedOnce] = useState(() => !!cached);
   const [error, setError] = useState<string | null>(null);
 
   const fetchRef = useRef(fetchPage);
-  const pageRef = useRef(0);
+  const pageRef = useRef(cached?.page ?? 0);
   const inFlightRef = useRef(false);
-  const hasMoreRef = useRef(true);
+  const hasMoreRef = useRef(cached?.hasMore ?? true);
   const itemsRef = useRef<Media[]>(items);
   useEffect(() => {
     itemsRef.current = items;
-  }, [items]);
+    if (cacheKey && (items.length > 0 || loadedOnce)) {
+      queryClient.setQueryData<CachedMediaState>(['media-collection', cacheKey], {
+        items,
+        count,
+        hasMore,
+        page: pageRef.current,
+      });
+    }
+  }, [items, count, hasMore, cacheKey, queryClient, loadedOnce]);
 
   const loadMore = useCallback(async () => {
     if (inFlightRef.current || !hasMoreRef.current) return;
@@ -89,8 +110,10 @@ export function useMediaCollection(fetchPage: PageFetcher): MediaCollection {
   }, []);
 
   useEffect(() => {
-    void loadMore();
-  }, [loadMore]);
+    if (!cached || cached.items.length === 0) {
+      void loadMore();
+    }
+  }, [loadMore, cached]);
 
   // Keep items that are still processing up to date: one batched request per tick, backing off
   // while nothing changes (items stuck on the server would otherwise be polled forever).

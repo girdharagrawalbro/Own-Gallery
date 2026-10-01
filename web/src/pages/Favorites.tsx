@@ -17,7 +17,7 @@ const EMPTY = {
 };
 
 const Favorites = () => {
-  const collection = useMediaCollection(fetchFavorites);
+  const collection = useMediaCollection(fetchFavorites, 'favorites');
   return (
     <LibraryView
       collection={collection}

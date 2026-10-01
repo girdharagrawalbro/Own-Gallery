@@ -18,6 +18,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Search, Users, X } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
 import { getPeople } from '../../api/people';
 import { Person } from '../../types/people';
 
@@ -94,27 +95,24 @@ const PeopleScreen = () => {
     const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();
 
-    const [people, setPeople] = useState<Person[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
     const [searchVisible, setSearchVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
-    const fetch = useCallback(async () => {
-        try {
-            const data = await getPeople();
-            setPeople(data);
-        } catch (err) {
-            console.error('Failed to fetch people', err);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, []);
+    const {
+        data: peopleData,
+        isLoading: loading,
+        isRefetching: refreshing,
+        refetch,
+    } = useQuery<Person[]>({
+        queryKey: ['people'],
+        queryFn: () => getPeople(),
+    });
 
-    useEffect(() => { fetch(); }, [fetch]);
+    const people = peopleData ?? [];
 
-    const onRefresh = useCallback(() => { setRefreshing(true); fetch(); }, [fetch]);
+    const onRefresh = useCallback(() => {
+        refetch();
+    }, [refetch]);
 
     const filtered = searchQuery.trim()
         ? people.filter(p =>

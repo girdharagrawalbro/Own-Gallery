@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { Sparkles } from 'lucide-react';
 
@@ -11,17 +11,12 @@ export interface Memory {
 }
 
 const MemoriesCarousel = () => {
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: memories = [], isLoading } = useQuery<Memory[]>({
+    queryKey: ['memories'],
+    queryFn: () => api.getMemories(),
+  });
 
-  useEffect(() => {
-    api.getMemories()
-      .then(setMemories)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading || memories.length === 0) return null;
+  if (isLoading || memories.length === 0) return null;
 
   return (
     <div className="memories-section">

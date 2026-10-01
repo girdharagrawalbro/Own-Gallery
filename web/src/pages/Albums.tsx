@@ -1,37 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Image as ImageIcon, Plus, X } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, getErrorMessage } from '../api/client';
 import MediaImage from '../components/MediaImage';
 import Modal from '../components/Modal';
 import type { Album } from '../types/media';
 
 const Albums = () => {
-  const [albums, setAlbums] = useState<Album[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .listAlbums()
-      .then((list) => {
-        if (!cancelled) setAlbums(list);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setLoadError(getErrorMessage(err, 'Failed to load albums'));
-          setAlbums([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const {
+    data: albums = null,
+    error: rawError,
+  } = useQuery<Album[]>({
+    queryKey: ['albums'],
+    queryFn: () => api.listAlbums(),
+  });
+
+  const loadError = rawError ? getErrorMessage(rawError, 'Failed to load albums') : null;
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => api.createAlbum(name),
+    onSuccess: (newAlbum) => {
+      queryClient.setQueryData<Album[]>(['albums'], (prev) => [newAlbum, ...(prev ?? [])]);
+      closeCreate();
+    },
+    onError: (err) => {
+      setCreateError(getErrorMessage(err, 'Failed to create album'));
+    },
+  });
 
   const closeCreate = () => {
     setShowCreate(false);
@@ -43,18 +45,11 @@ const Albums = () => {
     e.preventDefault();
     const name = newAlbumName.trim();
     if (!name) return;
-    setIsCreating(true);
     setCreateError(null);
-    try {
-      const album = await api.createAlbum(name);
-      setAlbums((prev) => [album, ...(prev ?? [])]);
-      closeCreate();
-    } catch (err) {
-      setCreateError(getErrorMessage(err, 'Failed to create album'));
-    } finally {
-      setIsCreating(false);
-    }
+    createMutation.mutate(name);
   };
+
+  const isCreating = createMutation.isPending;
 
   return (
     <div className="library">

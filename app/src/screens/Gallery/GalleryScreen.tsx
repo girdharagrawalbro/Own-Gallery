@@ -43,6 +43,7 @@ import MediaViewer from './MediaViewer';
 import UploadPreviewModal from './UploadPreviewModal';
 import SelectAlbumModal from '../Albums/SelectAlbumModal';
 import CloudIndicator from '../../components/CloudIndicator';
+import MemoriesCarousel from '../../components/MemoriesCarousel';
 
 type LoadState = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'error';
 type SortOrdering = 'date' | 'added';
@@ -417,38 +418,8 @@ const GalleryScreen = () => {
         </View>
     );
 
-    return (
-        <View style={styles.container}>
-            {/* Search pill */}
-            <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16) }]}>
-                <View style={styles.searchPill}>
-                    <Search size={20} color="#777" style={styles.searchIcon} />
-                    <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search your photos"
-                        placeholderTextColor="#777"
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        returnKeyType="search"
-                        onSubmitEditing={() => Keyboard.dismiss()}
-                    />
-                    {searchQuery.length > 0 ? (
-                        <Pressable onPress={() => setSearchQuery('')} hitSlop={10} style={styles.clearSearch}>
-                            <X size={18} color="#5f6368" />
-                        </Pressable>
-                    ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <CloudIndicator />
-                            <TouchableOpacity style={styles.profileAvatar} onPress={() => navigation.navigate('Settings')}>
-                                <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-                </View>
-            </View>
-
     const renderHeader = () => {
-        if (selectionMode) return null;
+        if (selectionMode) return undefined;
         return (
             <View style={styles.headerContainer}>
                 <MemoriesCarousel />
@@ -481,6 +452,37 @@ const GalleryScreen = () => {
             </View>
         );
     };
+
+    return (
+        <View style={styles.container}>
+            {/* Search pill */}
+            <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16) }]}>
+                <View style={styles.searchPill}>
+                    <Search size={20} color="#777" style={styles.searchIcon} />
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search your photos"
+                        placeholderTextColor="#777"
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        returnKeyType="search"
+                        onSubmitEditing={() => Keyboard.dismiss()}
+                    />
+                    {searchQuery.length > 0 ? (
+                        <Pressable onPress={() => setSearchQuery('')} hitSlop={10} style={styles.clearSearch}>
+                            <X size={18} color="#5f6368" />
+                        </Pressable>
+                    ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <CloudIndicator />
+                            <TouchableOpacity style={styles.profileAvatar} onPress={() => navigation.navigate('Settings')}>
+                                <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+            </View>
+
             <MediaGrid
                 ref={gridRef}
                 media={combinedMedia}

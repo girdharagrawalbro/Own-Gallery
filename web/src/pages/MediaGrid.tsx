@@ -22,8 +22,7 @@ const ADDED_DATE_OF = (m: Media) => mediaAddedDate(m);
 const MediaGrid = () => {
   const [ordering, setOrdering] = useState<MediaOrdering>('date');
   const fetcher = useMemo(() => makeFetcher(ordering), [ordering]);
-  // Remount the collection (key) when ordering changes so pagination restarts cleanly.
-  const collection = useMediaCollection(fetcher);
+  const collection = useMediaCollection(fetcher, `grid-${ordering}`);
   const { openFilePicker } = useUploadActions();
 
   // Insert freshly processed uploads without reloading the page.

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { api, getErrorMessage } from '../api/client';
 import type { Person } from '../types/people';
 
@@ -56,21 +56,15 @@ const FaceAvatar = ({ person }: { person: Person }) => {
 };
 
 const PeoplePage = () => {
-  const [people, setPeople] = useState<Person[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: people = null,
+    error: rawError,
+  } = useQuery<Person[]>({
+    queryKey: ['people'],
+    queryFn: () => api.listPeople(),
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    api.listPeople().then((list) => {
-      if (!cancelled) setPeople(list);
-    }).catch((err: unknown) => {
-      if (!cancelled) {
-        setError(getErrorMessage(err, 'Failed to load people'));
-        setPeople([]);
-      }
-    });
-    return () => { cancelled = true; };
-  }, []);
+  const error = rawError ? getErrorMessage(rawError, 'Failed to load people') : null;
 
   return (
     <div className="library">

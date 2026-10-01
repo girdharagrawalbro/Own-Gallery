@@ -24,6 +24,7 @@ import {
     ArrowUpDown,
     Check,
 } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
 import RemoteImage from '../../components/RemoteImage';
 import { getAlbums } from '../../api/albums';
 import { Album } from '../../types/album';
@@ -60,10 +61,6 @@ const AlbumsScreen = () => {
     const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();
 
-    const [albums, setAlbums] = useState<Album[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-
     const [searchVisible, setSearchVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const searchAnim = useRef(new Animated.Value(0)).current;
@@ -72,29 +69,21 @@ const AlbumsScreen = () => {
     const [sortMenuVisible, setSortMenuVisible] = useState(false);
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
-    const fetchAlbumsList = useCallback(async () => {
-        try {
-            // TODO(api/albums.ts): extend getAlbums to accept a `sort` param for server-side
-            // sorting once the dataset is large enough that client-side sort isn't ideal.
-            const data = await getAlbums(1, searchQuery);
-            setAlbums(data.results);
-        } catch (err) {
-            console.error('Failed to fetch albums', err);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    }, [searchQuery]);
+    const {
+        data: albumData,
+        isLoading: loading,
+        isRefetching: refreshing,
+        refetch,
+    } = useQuery({
+        queryKey: ['albums', searchQuery],
+        queryFn: () => getAlbums(1, searchQuery),
+    });
 
-    useEffect(() => {
-        const timeout = setTimeout(() => { fetchAlbumsList(); }, 300);
-        return () => clearTimeout(timeout);
-    }, [fetchAlbumsList]);
+    const albums = useMemo(() => albumData?.results ?? [], [albumData]);
 
     const onRefresh = useCallback(() => {
-        setRefreshing(true);
-        fetchAlbumsList();
-    }, [fetchAlbumsList]);
+        refetch();
+    }, [refetch]);
 
     const sortedAlbums = useMemo(() => {
         const copy = [...albums];

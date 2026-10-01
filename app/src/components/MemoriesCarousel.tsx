@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { Sparkles } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
 import { getMemories } from '../api/media';
 
 export interface Memory {
@@ -12,15 +13,10 @@ export interface Memory {
 }
 
 const MemoriesCarousel = () => {
-    const [memories, setMemories] = useState<Memory[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        getMemories()
-            .then(setMemories)
-            .catch(console.error)
-            .finally(() => setLoading(false));
-    }, []);
+    const { data: memories = [], isLoading: loading } = useQuery<Memory[]>({
+        queryKey: ['memories'],
+        queryFn: () => getMemories(),
+    });
 
     if (loading || memories.length === 0) return null;
 
