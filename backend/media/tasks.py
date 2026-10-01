@@ -257,9 +257,6 @@ def _upload_media_to_telegram(self, media_id):
             media.telegram_file_unique_id = stored["file_unique_id"]
             media.telegram_thumbnail_file_id = stored["thumbnail_file_id"]
             media.save()
-
-        else:
-            pass
         step = mark("telegram_original", step)
         _store_variant(storage, media, MediaVariant.PREVIEW, preview_path, "image/jpeg", *preview_dims)
         _store_variant(storage, media, MediaVariant.STREAM, stream_path, "video/mp4", media.width, media.height)
