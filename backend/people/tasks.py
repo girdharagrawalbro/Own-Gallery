@@ -8,6 +8,9 @@ from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
+SCAN_CACHE_PREFIX = "people:scanned:"
+SCAN_CACHE_TTL = 86400 * 30  # 30 days
+
 # Redis debounce key: run at most one cluster job per user per window
 CLUSTER_LOCK_TTL = 90  # seconds
 CLUSTER_COOLDOWN = 60  # delay before cluster fires after last detect
@@ -41,6 +44,7 @@ def detect_faces(self, media_id: int):
 
     # Skip if we already detected faces for this image
     if Face.objects.filter(media=media).exists():
+        cache.set(f"{SCAN_CACHE_PREFIX}{media_id}", 1, timeout=SCAN_CACHE_TTL)
         return
 
     # Download the preview/thumbnail to a temp file
@@ -55,6 +59,7 @@ def detect_faces(self, media_id: int):
         file_id = (variant.telegram_file_id if variant else None) or media.telegram_thumbnail_file_id
         if not file_id:
             logger.debug("No file_id for media %s, skipping face detection", media_id)
+            cache.set(f"{SCAN_CACHE_PREFIX}{media_id}", 1, timeout=SCAN_CACHE_TTL)
             return
 
         suffix = ".jpg"
@@ -73,6 +78,8 @@ def detect_faces(self, media_id: int):
             img_h, img_w = image.shape[:2]
 
             locations = face_recognition.face_locations(image, model="hog")
+            # Mark this media as scanned so future periodic passes skip it even if 0 faces found
+            cache.set(f"{SCAN_CACHE_PREFIX}{media_id}", 1, timeout=SCAN_CACHE_TTL)
             if not locations:
                 return
 
@@ -208,17 +215,54 @@ def cluster_faces(self, user_id: int):
 
 
 @shared_task
-def reprocess_undetected_faces():
+def reprocess_undetected_faces(user_id=None, limit=100, force=False):
     """
-    Periodic beat task: find completed images without face detection and queue them.
-    Run this every few hours as a catch-up for photos uploaded before face detection existed.
+    Periodic beat task or on-demand trigger: find completed images without face detection and queue them.
+    Skips images that were already scanned and had 0 faces via Redis cache lookup.
     """
     from media.models import Media
 
-    unprocessed = (
-        Media.objects.filter(status="completed", media_type="image", is_deleted=False, faces__isnull=True)
-        .values_list("id", flat=True)[:100]
+    qs = Media.objects.filter(
+        status="completed",
+        media_type="image",
+        is_deleted=False,
+        faces__isnull=True,
+    ).order_by("-id")
+
+    if user_id is not None:
+        qs = qs.filter(user_id=user_id)
+
+    # Fetch candidate media IDs in a larger batch so we can filter out cached 0-face images
+    candidate_chunk_size = min(limit * 5, 1000)
+    candidate_ids = list(qs.values_list("id", flat=True)[:candidate_chunk_size])
+
+    if not candidate_ids:
+        logger.info("No unscanned images found (user=%s)", user_id)
+        return {"queued": 0, "skipped_cached": 0}
+
+    if not force:
+        cache_keys = [f"{SCAN_CACHE_PREFIX}{mid}" for mid in candidate_ids]
+        cached_dict = cache.get_many(cache_keys)
+        unscanned_ids = [mid for mid in candidate_ids if f"{SCAN_CACHE_PREFIX}{mid}" not in cached_dict]
+    else:
+        unscanned_ids = candidate_ids
+
+    to_queue = unscanned_ids[:limit]
+    for idx, mid in enumerate(to_queue):
+        # Stagger countdown slightly (2s per image) so downloads & HOG detection don't burst CPU
+        detect_faces.apply_async(args=[mid], countdown=idx * 2)
+
+    skipped = len(candidate_ids) - len(unscanned_ids)
+    logger.info(
+        "Queued %d images for face detection (user=%s, scanned_cached_skipped=%d)",
+        len(to_queue),
+        user_id,
+        skipped,
     )
-    for media_id in unprocessed:
-        detect_faces.apply_async(args=[media_id], countdown=30)
-    logger.info("Queued %d images for face detection (catch-up)", len(list(unprocessed)))
+
+    # If triggered for a user, schedule cluster_faces to run once the queued images settle
+    if user_id and to_queue:
+        cluster_delay = max(len(to_queue) * 2 + 10, CLUSTER_COOLDOWN)
+        cluster_faces.apply_async(args=[user_id], countdown=cluster_delay)
+
+    return {"queued": len(to_queue), "skipped_cached": skipped}

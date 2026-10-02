@@ -170,3 +170,20 @@ def media_faces(request, media_id):
         for f in faces
     ]
     return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def trigger_face_scan(request):
+    """POST /api/people/scan/ — Trigger face detection scan for unscanned photos."""
+    from .tasks import reprocess_undetected_faces
+
+    force = bool(request.data.get("force", False))
+    reprocess_undetected_faces.delay(user_id=request.user.id, limit=200, force=force)
+    return Response(
+        {
+            "status": "queued",
+            "message": "Face scan has been queued in the background. Identified people will appear shortly.",
+        }
+    )
+

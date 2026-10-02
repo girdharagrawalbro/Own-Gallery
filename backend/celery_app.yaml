@@ -258,6 +258,13 @@ properties:
         value: ''
       - name: APP_LOG_LEVEL
         value: DEBUG
+      args:
+      - worker
+      - -B
+      - -l
+      - info
+      - --concurrency=1
+      - --pool=solo
       image: owngalleryacr2026.azurecr.io/own-gallery-django:v14
       name: own-gallery-celery
       resources:

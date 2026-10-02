@@ -254,6 +254,8 @@ export const api = {
       .then((r) => r.data),
   getMediaFaces: (mediaId: number | string) =>
     apiClient.get(`/media/${mediaId}/faces/`).then((r) => r.data),
+  scanFaces: (force = false) =>
+    apiClient.post<{ status: string; message: string }>('/people/scan/', { force }).then((r) => r.data),
 
   // Google Integration
   googleLogin: (authCode: string) =>

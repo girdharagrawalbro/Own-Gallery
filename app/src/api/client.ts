@@ -25,6 +25,8 @@ export const api = axios.create({
     Accept: 'application/json',
   },
 });
+export const apiClient = api;
+
 
 let isRefreshing = false;
 

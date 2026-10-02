@@ -50,3 +50,9 @@ export const getMediaFaces = async (mediaId: number): Promise<Face[]> => {
   const response = await api.get<Face[]>(`/media/${mediaId}/faces/`);
   return response.data;
 };
+
+export const scanFaces = async (force = false): Promise<{ status: string; message: string }> => {
+  const response = await api.post<{ status: string; message: string }>('/people/scan/', { force });
+  return response.data;
+};
+

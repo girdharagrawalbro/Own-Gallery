@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-TAG="${1:-v19}"
+TAG="${1:-v20}"
 
 echo "Deploying backend to Azure Container Apps with tag: $TAG..."
 cd backend

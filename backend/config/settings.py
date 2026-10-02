@@ -195,6 +195,13 @@ CELERY_WORKER_ENABLE_REMOTE_CONTROL = os.getenv("CELERY_REMOTE_CONTROL", "False"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 
+CELERY_BEAT_SCHEDULE = {
+    "reprocess-undetected-faces-hourly": {
+        "task": "people.tasks.reprocess_undetected_faces",
+        "schedule": 3600.0,  # Run every hour
+    },
+}
+
 if os.getenv("CACHE_BACKEND") == "locmem":
     CACHES = {
         "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},

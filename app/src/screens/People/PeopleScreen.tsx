@@ -17,10 +17,11 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Search, Users, X } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
-import { getPeople } from '../../api/people';
+import { ArrowLeft, Search, Users, X, ScanFace } from 'lucide-react-native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPeople, scanFaces } from '../../api/people';
 import { Person } from '../../types/people';
+
 
 const { width } = Dimensions.get('window');
 const COLS = 3;
@@ -98,6 +99,26 @@ const PeopleScreen = () => {
     const [searchVisible, setSearchVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
+    const queryClient = useQueryClient();
+    const scanMutation = useMutation({
+        mutationFn: () => scanFaces(),
+        onSuccess: (data) => {
+            Alert.alert(
+                'Face Scan Started',
+                data.message || 'Face detection has been queued. People will appear as photos are processed.',
+            );
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['people'] });
+            }, 5000);
+        },
+        onError: (err: any) => {
+            Alert.alert(
+                'Scan Failed',
+                err?.response?.data?.message || err?.message || 'Could not start face scan.',
+            );
+        },
+    });
+
     const {
         data: peopleData,
         isLoading: loading,
@@ -167,9 +188,24 @@ const PeopleScreen = () => {
                             <ArrowLeft size={24} color="#3c4043" />
                         </TouchableOpacity>
                         <Text style={styles.headerTitle}>People & Pets</Text>
-                        <TouchableOpacity onPress={() => setSearchVisible(true)} hitSlop={12} style={styles.iconBtn}>
-                            <Search size={22} color="#3c4043" />
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <TouchableOpacity
+                                onPress={() => scanMutation.mutate()}
+                                disabled={scanMutation.isPending}
+                                hitSlop={12}
+                                style={styles.iconBtn}
+                                accessibilityLabel="Scan photos for faces"
+                            >
+                                {scanMutation.isPending ? (
+                                    <ActivityIndicator size="small" color="#1a73e8" />
+                                ) : (
+                                    <ScanFace size={22} color="#3c4043" />
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setSearchVisible(true)} hitSlop={12} style={styles.iconBtn}>
+                                <Search size={22} color="#3c4043" />
+                            </TouchableOpacity>
+                        </View>
                     </>
                 )}
             </View>
@@ -189,6 +225,22 @@ const PeopleScreen = () => {
                             ? 'Try a different name'
                             : 'Face grouping runs in the background after you upload photos.'}
                     </Text>
+                    {!searchQuery && (
+                        <TouchableOpacity
+                            style={styles.scanBtn}
+                            onPress={() => scanMutation.mutate()}
+                            disabled={scanMutation.isPending}
+                        >
+                            {scanMutation.isPending ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <ScanFace size={18} color="#fff" style={{ marginRight: 8 }} />
+                            )}
+                            <Text style={styles.scanBtnText}>
+                                {scanMutation.isPending ? 'Starting scan...' : 'Scan photos for faces'}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             ) : (
                 <FlatList
@@ -202,6 +254,7 @@ const PeopleScreen = () => {
             )}
         </View>
     );
+
 };
 
 export default PeopleScreen;
@@ -261,4 +314,19 @@ const styles = StyleSheet.create({
 
     emptyTitle: { fontSize: 18, fontWeight: '600', color: '#3c4043', marginTop: 16, textAlign: 'center' },
     emptySubtitle: { fontSize: 14, color: '#777', marginTop: 8, textAlign: 'center', lineHeight: 20 },
+    scanBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1a73e8',
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 20,
+        marginTop: 20,
+    },
+    scanBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
 });
+
