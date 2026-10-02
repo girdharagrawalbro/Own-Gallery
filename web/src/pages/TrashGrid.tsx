@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Check, Info, Trash2, Shield, Play, Images, Video, Grid3X3, RotateCcw } from 'lucide-react';
+import { Check, Info, Trash2, Shield, Play, Images, Video, Grid3X3, RotateCcw, X } from 'lucide-react';
 import { api } from '../api/client';
 import { useMediaCollection } from '../hooks/useMediaCollection';
 import type { PageFetcher } from '../hooks/useMediaCollection';
@@ -34,7 +34,7 @@ const TrashGrid = () => {
     verb: string,
     errorMessage: string,
   ) => {
-    const ids = isSelectMode ? Array.from(selected) : items.map(m => m.id);
+    const ids = Array.from(selected);
     if (ids.length === 0) return;
     
     clearSelection();
@@ -43,19 +43,28 @@ const TrashGrid = () => {
   };
 
   const handleRestore = () => {
-    if (isSelectMode && selected.size === 0) {
-      showToast('Tap photos to select for restore');
+    if (selected.size === 0) {
+      showToast('Select items to restore');
       return;
     }
     runOnSelection(api.restore, 'Restored', 'Could not restore');
   };
 
+  const handleRestoreAll = async () => {
+    if (items.length === 0) return;
+    if (!window.confirm(`Restore all ${items.length} items from trash?`)) return;
+    clearSelection();
+    const ids = items.map(m => m.id);
+    const ok = await removeOptimistic(ids, () => Promise.all(ids.map(api.restore)), 'Could not restore all items');
+    if (ok) showToast(`Restored all ${ids.length} items`);
+  };
+
   const handleDeleteForever = () => {
-    const ids = isSelectMode ? Array.from(selected) : items.map(m => m.id);
+    const ids = Array.from(selected);
     if (ids.length === 0) return;
     
     if (!window.confirm(`Permanently delete ${ids.length} item${ids.length === 1 ? '' : 's'}? This can't be undone.`)) return;
-    void runOnSelection(api.permanentDelete, 'Deleted', 'Could not delete');
+    void runOnSelection(api.permanentDelete, 'Permanently deleted', 'Could not delete');
   };
 
   const handleEmptyTrash = async () => {
@@ -184,14 +193,42 @@ const TrashGrid = () => {
               Items are permanently deleted after 30 days in Trash. Cloud backup space is freed when permanently removed.
             </p>
             <div className="trash-banner-actions">
-              <button className="trash-btn trash-btn-empty" onClick={handleEmptyTrash}>
-                <Trash2 size={16} />
-                Empty Trash
-              </button>
-              <button className="trash-btn trash-btn-select" onClick={handleToggleSelectMode}>
-                <Check size={16} />
-                {isSelectMode ? 'Cancel' : 'Select'}
-              </button>
+              {!isSelectMode ? (
+                <>
+                  <button className="trash-btn trash-btn-empty" onClick={handleEmptyTrash}>
+                    <Trash2 size={16} />
+                    Empty Trash
+                  </button>
+                  <button className="trash-btn trash-btn-restore-all" onClick={handleRestoreAll}>
+                    <RotateCcw size={16} />
+                    Restore All
+                  </button>
+                  <button className="trash-btn trash-btn-select" onClick={handleToggleSelectMode}>
+                    <Check size={16} />
+                    Select
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="trash-btn trash-btn-select-all"
+                    onClick={() => {
+                      if (selected.size === filteredItems.length) {
+                        setSelected(new Set());
+                      } else {
+                        setSelected(new Set(filteredItems.map(m => m.id)));
+                      }
+                    }}
+                  >
+                    <Check size={16} />
+                    {selected.size === filteredItems.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                  <button className="trash-btn trash-btn-cancel" onClick={clearSelection}>
+                    <X size={16} />
+                    Cancel
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -320,19 +357,30 @@ const TrashGrid = () => {
             </p>
           </div>
           
-          {/* Floating Action Bar */}
-          <div className="trash-fab-container">
-            <div className="trash-fab">
-              <button className="trash-fab-btn trash-fab-restore" onClick={handleRestore}>
-                <RotateCcw size={20} />
-                Restore {isSelectMode && selected.size > 0 ? `(${selected.size})` : `All (${items.length})`}
-              </button>
-              <button className="trash-fab-btn trash-fab-delete" onClick={handleDeleteForever}>
-                <Trash2 size={20} />
-                Delete {isSelectMode && selected.size > 0 ? `(${selected.size})` : 'Forever'}
-              </button>
+          {/* Floating Action Bar - Only appears when items are selected */}
+          {selected.size > 0 && (
+            <div className="trash-fab-container">
+              <div className="trash-fab">
+                <span className="trash-fab-count">{selected.size} selected</span>
+                <button className="trash-fab-btn trash-fab-restore" onClick={handleRestore}>
+                  <RotateCcw size={18} />
+                  Restore
+                </button>
+                <button className="trash-fab-btn trash-fab-delete" onClick={handleDeleteForever}>
+                  <Trash2 size={18} />
+                  Delete Forever
+                </button>
+                <button
+                  className="trash-fab-btn trash-fab-cancel"
+                  onClick={clearSelection}
+                  title="Cancel selection"
+                  aria-label="Cancel selection"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-          </div>
+          )}
           
         </div>
       )}

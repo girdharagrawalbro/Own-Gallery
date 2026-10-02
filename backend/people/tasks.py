@@ -30,8 +30,8 @@ def detect_faces(self, media_id: int):
     """
     try:
         import face_recognition  # optional heavy dependency
-    except ImportError:
-        logger.warning("face_recognition not installed – skipping face detection for media %s", media_id)
+    except (ImportError, Exception, SystemExit, BaseException) as exc:
+        logger.warning("face_recognition could not be loaded – skipping face detection for media %s: %s", media_id, exc)
         return
 
     from media.models import Media
