@@ -9,6 +9,9 @@ cd backend
 echo "Building Docker image: owngalleryacr2026.azurecr.io/own-gallery-django:$TAG..."
 docker build -t "owngalleryacr2026.azurecr.io/own-gallery-django:$TAG" .
 
+echo "Logging in to Azure Container Registry..."
+az acr login --name owngalleryacr2026
+
 echo "Pushing Docker image to ACR..."
 docker push "owngalleryacr2026.azurecr.io/own-gallery-django:$TAG"
 
