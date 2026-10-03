@@ -189,6 +189,15 @@ class MTProtoClient:
         self._ensure_started()
         return self._run(self._download_thumbnail(message_id), timeout=60)
 
+    async def _download(self, message_id, destination):
+        message = await self._get_message(message_id)
+        await self._client.download_media(message, file=destination)
+
+    def download(self, message_id, destination):
+        """Download the complete Telegram media referenced by message_id."""
+        self._ensure_started()
+        self._run(self._download(message_id, destination), timeout=10 * 60)
+
     # -- uploads / deletes ------------------------------------------------
 
     async def _upload(self, path, filename, mime_type, thumbnail_path):
