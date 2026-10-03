@@ -9,7 +9,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        libpq5 \
        ffmpeg \
-       # dlib / face_recognition build deps
+       git \
        cmake \
        build-essential \
        libopenblas-dev \

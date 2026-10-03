@@ -56,9 +56,19 @@ def detect_faces(self, media_id: int):
         from media.models import MediaVariant
 
         variant = media.variants.filter(kind=MediaVariant.PREVIEW).first()
-        file_id = (variant.telegram_file_id if variant else None) or media.telegram_thumbnail_file_id
-        if not file_id:
-            logger.debug("No file_id for media %s, skipping face detection", media_id)
+
+        message_id = variant.telegram_message_id if variant else None
+        file_id = variant.telegram_file_id if variant else None
+
+        if not message_id and not file_id:
+            message_id = media.telegram_message_id
+            file_id = media.telegram_file_id
+
+        if not message_id and not file_id:
+            logger.warning(
+                "No Telegram reference for media %s, skipping face detection",
+                media_id,
+            )
             cache.set(f"{SCAN_CACHE_PREFIX}{media_id}", 1, timeout=SCAN_CACHE_TTL)
             return
 
@@ -67,7 +77,11 @@ def detect_faces(self, media_id: int):
         os.close(fd)
 
         try:
-            storage.download(file_id, local_path)
+            storage.download(
+                message_id=message_id,
+                file_id=file_id,
+                destination=local_path,
+            )
         except Exception as exc:
             logger.warning("Could not download media %s for face detection: %s", media_id, exc)
             os.unlink(local_path)

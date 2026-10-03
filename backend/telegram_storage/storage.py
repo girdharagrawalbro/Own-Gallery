@@ -70,3 +70,21 @@ class TelegramStorage:
         client = BotApiClient()
         for message_id in message_ids:
             client.delete_message(message_id)
+
+    def download(self, *, message_id=None, file_id=None, destination):
+        if self.uses_mtproto:
+            if not message_id:
+                raise ValueError("message_id is required for MTProto download")
+
+            self.mtproto.download(
+                message_id=message_id,
+                destination=destination,
+            )
+            return
+
+        if not file_id:
+            raise ValueError("file_id is required for Bot API download")
+
+        data = self.bot_api.download_bytes(file_id)
+        with open(destination, "wb") as f:
+            f.write(data)
