@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from media.serializers import MediaSerializer
+from media.signing import signed_path
 from .models import Face, Person
 
 
@@ -57,13 +58,15 @@ class PersonListSerializer(serializers.ModelSerializer):
         return obj.faces.values("media_id").distinct().count()
 
     def get_cover_thumbnail_url(self, obj):
-        if obj.cover_face and obj.cover_face.media:
-            return obj.cover_face.media.thumbnail
-        # fallback: first face's media
-        first_face = obj.faces.select_related("media").first()
-        if first_face and first_face.media:
-            return first_face.media.thumbnail
-        return None
+        media_id = obj.cover_face.media_id if obj.cover_face else None
+        if media_id is None:
+            # fallback: first face's media
+            media_id = obj.faces.values_list("media_id", flat=True).first()
+        if media_id is None:
+            return None
+        request = self.context.get("request")
+        path = signed_path(media_id, "thumbnail")
+        return request.build_absolute_uri(path) if request else path
 
 
 class PersonDetailSerializer(PersonListSerializer):

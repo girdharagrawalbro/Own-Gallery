@@ -47,7 +47,7 @@ def person_detail(request, pk):
     if request.method == "PATCH":
         allowed = {"name", "is_hidden"}
         data = {k: v for k, v in request.data.items() if k in allowed}
-        serializer = PersonListSerializer(person, data=data, partial=True)
+        serializer = PersonListSerializer(person, data=data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
