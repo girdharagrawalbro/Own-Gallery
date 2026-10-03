@@ -136,19 +136,34 @@ def detect_faces(self, media_id: int):
         raise self.retry(exc=exc)
 
 
+def _assign_single_face(face, user_id):
+    """DBSCAN needs 2+ samples, so a lone face gets its own Person directly."""
+    from .models import Person
+
+    if face.person_id is not None:
+        return
+
+    person = Person.objects.create(user_id=user_id)
+    face.person = person
+    face.save(update_fields=["person"])
+
+    person.cover_face = face
+    person.save(update_fields=["cover_face"])
+
+    logger.info(
+        "Created Person %s for single face %s for user %s",
+        person.id,
+        face.id,
+        user_id,
+    )
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def cluster_faces(self, user_id: int):
     """
     Group all faces for a user into Person clusters using DBSCAN.
     Safe to re-run: existing Person assignments are updated, not duplicated.
     """
-    try:
-        import numpy as np
-        from sklearn.cluster import DBSCAN
-    except ImportError:
-        logger.warning("scikit-learn not installed – skipping clustering for user %s", user_id)
-        return
-
     from .models import Face, Person
 
     faces = list(
@@ -157,7 +172,18 @@ def cluster_faces(self, user_id: int):
         .order_by("id")
     )
 
-    if len(faces) < 2:
+    if not faces:
+        return
+
+    if len(faces) == 1:
+        _assign_single_face(faces[0], user_id)
+        return
+
+    try:
+        import numpy as np
+        from sklearn.cluster import DBSCAN
+    except ImportError:
+        logger.warning("scikit-learn not installed – skipping clustering for user %s", user_id)
         return
 
     try:
