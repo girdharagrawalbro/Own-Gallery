@@ -29,9 +29,11 @@ def detect_faces(self, media_id: int):
     After detection, triggers cluster_faces for the user (debounced).
     """
     try:
-        import face_recognition  # optional heavy dependency
+        from .engines import get_engine  # optional heavy dependency (dlib / insightface)
+
+        get_engine()
     except (ImportError, Exception, SystemExit, BaseException) as exc:
-        logger.warning("face_recognition could not be loaded – skipping face detection for media %s: %s", media_id, exc)
+        logger.warning("Face engine could not be loaded – skipping face detection for media %s: %s", media_id, exc)
         return
 
     from media.models import Media
@@ -88,30 +90,28 @@ def detect_faces(self, media_id: int):
             return
 
         try:
-            image = face_recognition.load_image_file(local_path)
-            img_h, img_w = image.shape[:2]
-
-            locations = face_recognition.face_locations(image, model="hog")
+            engine = get_engine()
+            detected, (img_w, img_h) = engine.process(local_path)
             # Mark this media as scanned so future periodic passes skip it even if 0 faces found
             cache.set(f"{SCAN_CACHE_PREFIX}{media_id}", 1, timeout=SCAN_CACHE_TTL)
-            if not locations:
+            if not detected:
                 return
 
-            encodings = face_recognition.face_encodings(image, locations)
-
-            faces_to_create = []
-            for (top, right, bottom, left), encoding in zip(locations, encodings):
-                faces_to_create.append(
-                    Face(
-                        media=media,
-                        box_top=top / img_h,
-                        box_right=right / img_w,
-                        box_bottom=bottom / img_h,
-                        box_left=left / img_w,
-                        embedding=encoding.tolist(),
-                        confidence=1.0,
-                    )
+            faces_to_create = [
+                Face(
+                    media=media,
+                    box_top=d["top"] / img_h,
+                    box_right=d["right"] / img_w,
+                    box_bottom=d["bottom"] / img_h,
+                    box_left=d["left"] / img_w,
+                    embedding=d["embedding"],
+                    confidence=d["confidence"],
+                    quality_score=d["quality"],
+                    detection_model=engine.detection_model,
+                    embedding_model=engine.embedding_model,
                 )
+                for d in detected
+            ]
 
             if faces_to_create:
                 Face.objects.bulk_create(faces_to_create)
@@ -165,16 +165,104 @@ def _assign_single_face(face, user_id):
     )
 
 
+def _cluster_group(faces, user, metric="cosine"):
+    """
+    Cluster ArcFace faces using cosine distance. Returns number of groups.
+    Only high-quality faces seed clusters; low-quality faces are attached to the
+    nearest person centroid when similar enough, else left ungrouped (a wrong
+    merge is worse than an ungrouped face).
+    """
+    import numpy as np
+    from collections import Counter, defaultdict
+    from sklearn.cluster import AgglomerativeClustering
+
+    from .models import Face, Person
+
+    min_q = getattr(settings, "FACE_MIN_QUALITY", 0.5)
+    seeds = [f for f in faces if f.quality_score >= min_q]
+    weak = [f for f in faces if f.quality_score < min_q]
+    eps = getattr(settings, "FACE_CLUSTER_COSINE_EPS", 0.55)
+
+    if not seeds:
+        return 0
+
+    if len(seeds) == 1:
+        labels = np.array([0])
+    else:
+        embeddings = np.array([f.embedding for f in seeds], dtype="float64")
+        # Average linkage prevents chaining (different people merging)
+        labels = AgglomerativeClustering(
+            n_clusters=None,
+            distance_threshold=eps,
+            metric=metric,
+            linkage="average",
+        ).fit(embeddings).labels_
+
+    clusters: dict[int, list] = defaultdict(list)
+    for face, label in zip(seeds, labels):
+        clusters[label].append(face)
+
+    person_centroids = {}  # person_id -> unit-normalised centroid (cosine mode)
+    for cluster_list in clusters.values():
+        # Majority vote keeps existing Person ids stable across re-runs
+        existing = [f.person_id for f in cluster_list if f.person_id is not None]
+        if existing:
+            person = Person.objects.get(pk=Counter(existing).most_common(1)[0][0])
+        else:
+            person = Person.objects.create(user=user)
+
+        Face.objects.filter(pk__in=[f.pk for f in cluster_list]).update(person=person)
+
+        emb = np.array([f.embedding for f in cluster_list], dtype="float64")
+        centroid = emb.mean(axis=0)
+        if metric == "cosine":
+            # Quality-weighted centroid
+            weights = np.array([max(f.quality_score, 1e-3) for f in cluster_list])
+            centroid = (emb * weights[:, None]).sum(axis=0) / weights.sum()
+            person_centroids[person.pk] = centroid / (np.linalg.norm(centroid) or 1.0)
+
+        # Cover face: among the more typical half (closest to centroid), take the
+        # largest in pixels — big faces give sharp avatars.
+        distances = np.linalg.norm(emb - centroid, axis=1)
+        cutoff = float(np.median(distances))
+        candidates = [f for f, d in zip(cluster_list, distances) if d <= cutoff]
+        best_face = max(candidates, key=_face_pixel_area)
+        if person.cover_face_id != best_face.pk:
+            person.cover_face = best_face
+            person.save(update_fields=["cover_face"])
+
+    # Attach low-quality faces to the closest centroid if clearly similar
+    if weak and person_centroids:
+        attach_sim = getattr(settings, "FACE_ATTACH_MIN_SIM", 0.5)
+        ids = list(person_centroids)
+        matrix = np.array([person_centroids[i] for i in ids])
+        for face in weak:
+            vec = np.array(face.embedding, dtype="float64")
+            vec = vec / (np.linalg.norm(vec) or 1.0)
+            sims = matrix @ vec
+            best = int(np.argmax(sims))
+            if sims[best] >= attach_sim and face.person_id != ids[best]:
+                Face.objects.filter(pk=face.pk).update(person_id=ids[best])
+
+    return len(clusters)
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=300, acks_late=True)
 def cluster_faces(self, user_id: int):
     """
-    Group all faces for a user into Person clusters using DBSCAN.
+    Group all faces for a user into Person clusters.
+    Only ArcFace faces are clustered; legacy rows from other embedding models
+    are ignored since their embeddings are not comparable.
     Safe to re-run: existing Person assignments are updated, not duplicated.
     """
-    from .models import Face, Person
+    from .models import Face
 
     faces = list(
-        Face.objects.filter(media__user_id=user_id, media__is_deleted=False)
+        Face.objects.filter(
+            media__user_id=user_id,
+            media__is_deleted=False,
+            embedding_model__startswith="arcface",
+        )
         .select_related("media__user")
         .order_by("id")
     )
@@ -187,82 +275,20 @@ def cluster_faces(self, user_id: int):
         return
 
     try:
-        import numpy as np
-        from sklearn.cluster import AgglomerativeClustering
+        import numpy  # noqa: F401
+        import sklearn  # noqa: F401
     except ImportError:
         logger.warning("scikit-learn not installed – skipping clustering for user %s", user_id)
         return
 
     try:
-        embeddings = np.array([f.embedding for f in faces])
-
-        eps = getattr(settings, "FACE_CLUSTER_EPS", 0.45)
-        # Use AgglomerativeClustering to prevent chaining (different people merging)
-        db = AgglomerativeClustering(
-            n_clusters=None,
-            distance_threshold=eps,
-            metric="euclidean",
-            linkage="average"
-        ).fit(embeddings)
-        labels = db.labels_
-
-        # Build label → list of faces mapping
-        from collections import defaultdict
-
-        clusters: dict[int, list[Face]] = defaultdict(list)
-        for face, label in zip(faces, labels):
-            clusters[label].append(face)
-
         from django.contrib.auth import get_user_model
 
-        User = get_user_model()
-        user = User.objects.get(pk=user_id)
-
-        for label, cluster_faces_list in clusters.items():
-            if label == -1:
-                # Noise faces: assign each to its own Person (or keep existing)
-                for face in cluster_faces_list:
-                    if face.person_id is None:
-                        person = Person.objects.create(user=user)
-                        face.person = person
-                        face.save(update_fields=["person"])
-                        person.cover_face = face
-                        person.save(update_fields=["cover_face"])
-                continue
-
-            # Find the best existing Person for this cluster (majority vote)
-            existing_persons = [f.person for f in cluster_faces_list if f.person_id is not None]
-            if existing_persons:
-                from collections import Counter
-
-                best_person_id = Counter(p.pk for p in existing_persons).most_common(1)[0][0]
-                person = Person.objects.get(pk=best_person_id)
-            else:
-                person = Person.objects.create(user=user)
-
-            # Reassign all faces in this cluster
-            face_ids = [f.pk for f in cluster_faces_list]
-            Face.objects.filter(pk__in=face_ids).update(person=person)
-
-            # Cover face: among the more typical half of the cluster (closest to the
-            # centroid, so it's really this person), take the largest face in pixels
-            # — big faces give sharp avatars, tiny background faces look blurry.
-            embeddings_cluster = np.array([f.embedding for f in cluster_faces_list])
-            centroid = embeddings_cluster.mean(axis=0)
-            distances = np.linalg.norm(embeddings_cluster - centroid, axis=1)
-            cutoff = float(np.median(distances))
-            candidates = [f for f, d in zip(cluster_faces_list, distances) if d <= cutoff]
-            best_face = max(candidates, key=_face_pixel_area)
-
-            if person.cover_face_id != best_face.pk:
-                person.cover_face = best_face
-                person.save(update_fields=["cover_face"])
+        user = get_user_model().objects.get(pk=user_id)
+        total_groups = _cluster_group(faces, user)
 
         logger.info(
-            "Clustered %d faces into %d groups for user %s",
-            len(faces),
-            len([l for l in set(labels) if l != -1]),
-            user_id,
+            "Clustered %d faces into %d groups for user %s", len(faces), total_groups, user_id
         )
 
     except Exception as exc:

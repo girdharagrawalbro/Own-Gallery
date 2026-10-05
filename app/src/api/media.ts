@@ -154,7 +154,18 @@ export const uploadMediaChunked = async (
   }
 };
 
-export const getStats = async (): Promise<{total_items: number, total_size: number}> => {
+export type MediaStats = {
+  total_items: number;
+  total_size: number;
+  photo_count: number;
+  photo_size: number;
+  video_count: number;
+  video_size: number;
+  trash_count: number;
+  trash_size: number;
+};
+
+export const getStats = async (): Promise<MediaStats> => {
   const response = await api.get('/media/stats/');
   return response.data;
 };

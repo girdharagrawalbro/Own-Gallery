@@ -41,6 +41,25 @@ export const runAutoBackupNow = async () => {
   await NativeMediaSync?.runNow();
 };
 
+export type BackupFolder = {
+  id: string;
+  name: string;
+  total: number;
+  pending: number;
+  selected: boolean;
+};
+
+export const getBackupFolders = async (): Promise<BackupFolder[]> => {
+  if (!NativeMediaSync) return [];
+  return JSON.parse(await NativeMediaSync.getFolders());
+};
+
+/** Pass every folder id (or an empty list) to back up the whole device. */
+export const setBackupFolders = async (ids: string[]) => {
+  if (!NativeMediaSync) throw new Error('Auto Backup is only available on Android');
+  await NativeMediaSync.setFolders(ids);
+};
+
 export type MediaAccess = 'full' | 'partial' | 'denied';
 
 /** Ask for photo/video read access (and, optionally, location metadata in originals). */

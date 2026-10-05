@@ -30,7 +30,7 @@ class BackupRunner(
   }
 
   suspend fun run(deadlineMillis: Long): Outcome {
-    val pending = scanner.pendingItems(ledger.finishedVersions())
+    val pending = scanner.pendingItems(ledger.finishedVersions(), prefs.selectedFolders)
     Log.i(TAG, "Backup pass: ${pending.size} item(s) not backed up yet")
 
     var uploaded = 0
@@ -128,9 +128,11 @@ class BackupRunner(
   }
 
   private suspend fun sendChunks(item: MediaItem, hash: String, session: UploadSession, from: Int) {
+    prefs.setCurrent(item.displayName, from * 100 / maxOf(session.totalChunks, 1))
     for (index in from until session.totalChunks) {
       sendChunk(item, session, index)
       ledger.saveProgress(item, hash, session.uploadId, index + 1, session.chunkSize, session.totalChunks)
+      prefs.setCurrent(item.displayName, (index + 1) * 100 / session.totalChunks)
       conditionsBlocking()?.let { throw PausedException(it) }
     }
   }

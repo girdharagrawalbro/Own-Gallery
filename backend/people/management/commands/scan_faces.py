@@ -45,7 +45,13 @@ class Command(BaseCommand):
         parser.add_argument(
             "--cluster-only",
             action="store_true",
-            help="Only run DBSCAN face clustering without scanning new photos.",
+            help="Only run face clustering without scanning new photos.",
+        )
+        parser.add_argument(
+            "--reset-legacy",
+            action="store_true",
+            help="Delete faces from older embedding models (e.g. dlib) so photos are re-scanned "
+            "with InsightFace. Unnamed people left empty are removed; named people are kept.",
         )
 
     def handle(self, *args, **options):
@@ -54,6 +60,20 @@ class Command(BaseCommand):
         force = options.get("force", False)
         sync = options.get("sync", False)
         cluster_only = options.get("cluster_only", False)
+
+        if options.get("reset_legacy"):
+            from people.models import Face, Person
+
+            legacy = Face.objects.exclude(embedding_model__startswith="arcface")
+            if options.get("user"):
+                legacy = legacy.filter(media__user__username=options["user"]) if not str(
+                    options["user"]
+                ).isdigit() else legacy.filter(media__user_id=int(options["user"]))
+            count = legacy.count()
+            legacy.delete()
+            Person.objects.filter(faces__isnull=True, name="").delete()
+            self.stdout.write(self.style.WARNING(f"Deleted {count} legacy face(s)."))
+            force = True  # photos were already marked scanned in the cache
 
         user = None
         if user_identifier:

@@ -66,7 +66,7 @@ def parse_client_timestamp(value):
         return None
 
 
-def filter_media(queryset, params):
+def filter_media(queryset, params, user):
     if params.get("is_favorite") == "true":
         queryset = queryset.filter(is_favorite=True)
 
@@ -81,9 +81,30 @@ def filter_media(queryset, params):
     date = params.get("date")
     if date:
         queryset = queryset.filter(taken_at__date=date)
+        
+    category = params.get("category")
+    if category == "large_videos":
+        queryset = queryset.filter(media_type="video", file_size__gte=50*1024*1024)
+    elif category == "whatsapp":
+        queryset = queryset.filter(filename__icontains="whatsapp")
+    elif category == "screenshots":
+        queryset = queryset.filter(filename__icontains="screenshot")
+    elif category == "duplicates":
+        duplicate_hashes = queryset.values('file_hash').annotate(hash_count=Count('id')).filter(hash_count__gt=1, file_hash__isnull=False)
+        duplicate_hashes_list = [item['file_hash'] for item in duplicate_hashes]
+        queryset = queryset.filter(file_hash__in=duplicate_hashes_list)
 
     search = (params.get("search") or "").strip()
     if search:
+        # First, try to perform semantic search
+        from media.search import perform_semantic_search
+        semantic_qs = perform_semantic_search(search, queryset, user)
+        
+        # If semantic search returns results, return them directly
+        if semantic_qs.exists():
+            return semantic_qs
+            
+        # Fallback to basic text search
         query = Q()
         for term in search.split():
             term_query = Q(filename__icontains=term)
@@ -156,11 +177,35 @@ class MediaViewSet(viewsets.ModelViewSet):
         if self.action == "retrieve":
             # Upload polling needs to see failed/duplicate items too.
             return queryset.filter(is_deleted=False)
+            
         queryset = queryset.filter(is_deleted=False).exclude(status="duplicate")
+        
+        # Private gallery filtering
+        is_private_req = self.request.query_params.get("is_private") == "true"
+        if is_private_req:
+            # Need to validate private_token
+            import jwt
+            from django.conf import settings
+            token = self.request.headers.get("X-Private-Token")
+            try:
+                if not token:
+                    raise PermissionDenied("Private token required.")
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                if payload.get("user_id") != self.request.user.id or payload.get("type") != "private_access":
+                    raise PermissionDenied("Invalid private token.")
+            except jwt.ExpiredSignatureError:
+                raise PermissionDenied("Private token expired.")
+            except jwt.InvalidTokenError:
+                raise PermissionDenied("Invalid private token.")
+                
+            queryset = queryset.filter(is_private=True)
+        else:
+            queryset = queryset.filter(is_private=False)
+            
         ordering = self.request.query_params.get("ordering", "date")
         if ordering == "added":
-            return filter_media(queryset, self.request.query_params).order_by("-created_at", "-id")
-        return filter_media(queryset, self.request.query_params).order_by("-taken_at", "-created_at")
+            return filter_media(queryset, self.request.query_params, self.request.user).order_by("-created_at", "-id")
+        return filter_media(queryset, self.request.query_params, self.request.user).order_by("-taken_at", "-created_at")
 
     # -- uploads -------------------------------------------------------------
 
@@ -226,7 +271,24 @@ class MediaViewSet(viewsets.ModelViewSet):
         if isinstance(request.auth, SignedMediaGrant):
             return request.auth.media
         # Owners can still see thumbnails of trashed items.
-        return get_object_or_404(Media, pk=pk, user=request.user)
+        media = get_object_or_404(Media, pk=pk, user=request.user)
+        
+        if media.is_private:
+            import jwt
+            from django.conf import settings
+            token = request.headers.get("X-Private-Token")
+            try:
+                if not token:
+                    raise PermissionDenied("Private token required.")
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+                if payload.get("user_id") != request.user.id or payload.get("type") != "private_access":
+                    raise PermissionDenied("Invalid private token.")
+            except jwt.ExpiredSignatureError:
+                raise PermissionDenied("Private token expired.")
+            except jwt.InvalidTokenError:
+                raise PermissionDenied("Invalid private token.")
+                
+        return media
 
     @staticmethod
     def _content_type(mime_type, filename):
@@ -462,54 +524,156 @@ class MediaViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="memories")
     def memories(self, request):
-        queryset = self.get_queryset().filter(status="completed", is_deleted=False)
+        queryset = self.get_queryset().filter(status="completed", is_deleted=False).exclude(taken_at__isnull=True)
         memories = []
+        today = timezone.now()
         
-        one_year_ago = timezone.now() - timedelta(days=365)
-        year_ago_media = queryset.filter(
-            taken_at__year=one_year_ago.year, 
-            taken_at__month=one_year_ago.month
-        ).order_by('?')[:5]
+        # 1. On this day
+        # Photos from past years on exactly this month and day
+        on_this_day_qs = queryset.filter(
+            taken_at__month=today.month,
+            taken_at__day=today.day,
+            taken_at__year__lt=today.year
+        ).order_by('-taken_at')
         
-        if year_ago_media.exists():
+        if on_this_day_qs.exists():
             memories.append({
-                "id": "1-year-ago",
-                "title": "1 Year Ago",
-                "subtitle": one_year_ago.strftime("%b %Y"),
-                "cover_url": MediaSerializer(year_ago_media.first(), context={'request': request}).data.get('preview_url'),
-                "media_ids": [m.id for m in year_ago_media]
+                "id": "on-this-day",
+                "title": "On this day",
+                "subtitle": today.strftime("%B %-d"),
+                "cover_url": MediaSerializer(on_this_day_qs.first(), context={'request': request}).data.get('preview_url'),
+                "media_ids": [m.id for m in on_this_day_qs]
             })
 
-        locations = queryset.exclude(location_name="").values('location_name').annotate(count=Count('id')).filter(count__gte=1).order_by('-count')[:3]
+        # 2. Trips (Locations)
+        # Find top locations with photos
+        locations = queryset.exclude(location_name="").values('location_name').annotate(count=Count('id')).filter(count__gte=3).order_by('-count')[:5]
         for i, loc in enumerate(locations):
             loc_name = loc['location_name']
-            loc_media = queryset.filter(location_name=loc_name).order_by('-taken_at')[:5]
+            loc_media = queryset.filter(location_name=loc_name).order_by('-taken_at')
             if loc_media.exists():
+                first_taken = loc_media.last().taken_at # oldest
                 memories.append({
                     "id": f"trip-{i}",
-                    "title": loc_name.split(',')[0], 
-                    "subtitle": loc_media.first().taken_at.strftime("%b %Y"),
+                    "title": f"{loc_name.split(',')[0]} Trip",
+                    "subtitle": first_taken.strftime("%B %Y"),
                     "cover_url": MediaSerializer(loc_media.first(), context={'request': request}).data.get('preview_url'),
                     "media_ids": [m.id for m in loc_media]
                 })
 
-        if not memories and queryset.exists():
-            memories.append({
-                "id": "recent-highlights",
-                "title": "Highlights",
-                "subtitle": "Recent",
-                "cover_url": MediaSerializer(queryset.first(), context={'request': request}).data.get('preview_url'),
-                "media_ids": [m.id for m in queryset[:5]]
-            })
+        # 3. Highlights from specific past months (if we don't have enough trips)
+        if len(memories) < 4:
+            # Get some random past months with photos
+            months = queryset.annotate(month=TruncMonth("taken_at")).values("month").annotate(count=Count("id")).filter(count__gte=5).order_by('?')[:4]
+            for i, m in enumerate(months):
+                month_date = m['month']
+                if not month_date:
+                    continue
+                month_media = queryset.filter(taken_at__year=month_date.year, taken_at__month=month_date.month).order_by('?')
+                if month_media.exists():
+                    memories.append({
+                        "id": f"month-{i}-{month_date.year}",
+                        "title": "Highlights",
+                        "subtitle": month_date.strftime("%B %Y"),
+                        "cover_url": MediaSerializer(month_media.first(), context={'request': request}).data.get('preview_url'),
+                        "media_ids": [m.id for m in month_media]
+                    })
+                    
+        # Dedup memories by id just in case
+        seen = set()
+        unique_memories = []
+        for mem in memories:
+            if mem['id'] not in seen:
+                seen.add(mem['id'])
+                unique_memories.append(mem)
 
-        return Response({"memories": memories})
+        return Response({"memories": unique_memories[:6]})
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
-        totals = Media.objects.filter(user=request.user, is_deleted=False, status="completed").aggregate(
-            total_items=Count("id"), total_size=Sum("file_size")
+        from django.db.models import Q
+
+        live = Media.objects.filter(user=request.user, is_deleted=False, status="completed")
+        totals = live.aggregate(
+            total_items=Count("id"),
+            total_size=Sum("file_size"),
+            photo_count=Count("id", filter=Q(media_type="image")),
+            photo_size=Sum("file_size", filter=Q(media_type="image")),
+            video_count=Count("id", filter=Q(media_type="video")),
+            video_size=Sum("file_size", filter=Q(media_type="video")),
         )
-        return Response({"total_items": totals["total_items"], "total_size": totals["total_size"] or 0})
+        trash = Media.objects.filter(user=request.user, is_deleted=True).aggregate(
+            trash_count=Count("id"), trash_size=Sum("file_size")
+        )
+        return Response({
+            "total_items": totals["total_items"],
+            "total_size": totals["total_size"] or 0,
+            "photo_count": totals["photo_count"],
+            "photo_size": totals["photo_size"] or 0,
+            "video_count": totals["video_count"],
+            "video_size": totals["video_size"] or 0,
+            "trash_count": trash["trash_count"],
+            "trash_size": trash["trash_size"] or 0,
+        })
+        
+    @action(detail=False, methods=["get"], url_path="places")
+    def places(self, request):
+        qs = self.get_queryset().exclude(latitude__isnull=True).exclude(longitude__isnull=True)
+        # Group by location_name or just return a list of lat/lngs for the map. 
+        # A heatmap usually wants all coordinates.
+        places_data = list(qs.values("id", "latitude", "longitude", "location_name"))
+        return Response({"places": places_data})
+        
+    @action(detail=False, methods=["get"], url_path="storage-assistant")
+    def storage_assistant(self, request):
+        qs = self.get_queryset()
+        
+        # 1. Large Videos (> 50MB)
+        large_videos = qs.filter(media_type="video", file_size__gte=50*1024*1024)
+        large_videos_stats = large_videos.aggregate(count=Count('id'), size=Sum('file_size'))
+        
+        # 2. WhatsApp media
+        whatsapp = qs.filter(filename__icontains="whatsapp")
+        whatsapp_stats = whatsapp.aggregate(count=Count('id'), size=Sum('file_size'))
+        
+        # 3. Screenshots
+        screenshots = qs.filter(filename__icontains="screenshot")
+        screenshot_stats = screenshots.aggregate(count=Count('id'), size=Sum('file_size'))
+        
+        # 4. Duplicates 
+        duplicate_hashes = qs.values('file_hash').annotate(hash_count=Count('id')).filter(hash_count__gt=1, file_hash__isnull=False)
+        
+        wasted_duplicate_size = 0
+        duplicate_count_to_remove = 0
+        for h in duplicate_hashes:
+            h_items = qs.filter(file_hash=h['file_hash']).order_by('created_at')
+            # Keep the first, consider the rest as recoverable waste
+            wasted_size = sum(item.file_size for item in list(h_items)[1:])
+            wasted_duplicate_size += wasted_size
+            duplicate_count_to_remove += (h['hash_count'] - 1)
+            
+        return Response({
+            "large_videos": {
+                "count": large_videos_stats['count'] or 0,
+                "size_bytes": large_videos_stats['size'] or 0,
+                "category": "large_videos"
+            },
+            "whatsapp_media": {
+                "count": whatsapp_stats['count'] or 0,
+                "size_bytes": whatsapp_stats['size'] or 0,
+                "category": "whatsapp"
+            },
+            "screenshots": {
+                "count": screenshot_stats['count'] or 0,
+                "size_bytes": screenshot_stats['size'] or 0,
+                "category": "screenshots"
+            },
+            "duplicates": {
+                "count": duplicate_count_to_remove,
+                "size_bytes": wasted_duplicate_size,
+                "category": "duplicates"
+            }
+        })
 
     @action(detail=False, methods=["get"], url_path="status")
     def status_batch(self, request):
@@ -653,6 +817,26 @@ class MediaViewSet(viewsets.ModelViewSet):
             is_favorite=is_favorite, updated_at=timezone.now()
         )
         return Response({"message": f"{updated} items favorite status updated."})
+
+    @action(detail=False, methods=["post"], url_path="bulk-private")
+    def bulk_private(self, request):
+        media_ids = request.data.get("media_ids", [])
+        if not isinstance(media_ids, list):
+            return Response({"error": "media_ids must be a list."}, status=status.HTTP_400_BAD_REQUEST)
+        updated = Media.objects.filter(id__in=media_ids, user=request.user, is_deleted=False).update(
+            is_private=True, updated_at=timezone.now()
+        )
+        return Response({"message": f"{updated} items moved to private gallery."})
+        
+    @action(detail=False, methods=["post"], url_path="bulk-unprivate")
+    def bulk_unprivate(self, request):
+        media_ids = request.data.get("media_ids", [])
+        if not isinstance(media_ids, list):
+            return Response({"error": "media_ids must be a list."}, status=status.HTTP_400_BAD_REQUEST)
+        updated = Media.objects.filter(id__in=media_ids, user=request.user, is_deleted=False).update(
+            is_private=False, updated_at=timezone.now()
+        )
+        return Response({"message": f"{updated} items removed from private gallery."})
 
 
 # -- public share links ----------------------------------------------------------------

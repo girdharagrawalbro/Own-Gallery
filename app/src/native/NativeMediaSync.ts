@@ -16,6 +16,15 @@ export type BackupStatus = {
   lastError: string;
   backedUpCount: number;
   skippedCount: number;
+  /** Items in the selected folders waiting to be uploaded (the backup queue). */
+  pendingCount: number;
+  /** Total size of the queued items, in bytes. */
+  pendingBytes: number;
+  /** File being uploaded right now ('' when idle) and its progress. */
+  currentName: string;
+  currentPercent: number;
+  /** 0 means every folder is backed up. */
+  selectedFolderCount: number;
 };
 
 /**
@@ -31,6 +40,10 @@ export interface Spec extends TurboModule {
   setSettings(enabled: boolean, wifiOnly: boolean, chargingOnly: boolean): Promise<void>;
   getStatus(): Promise<BackupStatus>;
   runNow(): Promise<void>;
+  /** JSON array of { id, name, total, pending, selected }. */
+  getFolders(): Promise<string>;
+  /** Folder ids to back up; an empty list means every folder. */
+  setFolders(ids: string[]): Promise<void>;
 
   /** Resolves with the created Media object as a JSON string. */
   uploadFile(taskId: string, uri: string, fileName: string, mimeType: string, clientTimestamp: string): Promise<string>;

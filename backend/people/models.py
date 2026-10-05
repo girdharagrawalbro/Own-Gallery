@@ -64,10 +64,14 @@ class Face(models.Model):
     box_right = models.FloatField()
     box_bottom = models.FloatField()
     box_left = models.FloatField()
-    # 128-dimensional embedding from face_recognition (dlib)
+    # Embedding vector: 128-D (dlib) or 512-D L2-normalised (ArcFace); see embedding_model
     embedding = models.JSONField()
     # Detection confidence (1.0 = high confidence from face_recognition)
     confidence = models.FloatField(default=1.0)
+    # 0..1 heuristic (detector score x face size); low-quality faces don't seed clusters
+    quality_score = models.FloatField(default=1.0)
+    detection_model = models.CharField(max_length=64, default="hog")
+    embedding_model = models.CharField(max_length=64, default="dlib_128")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

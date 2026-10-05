@@ -323,9 +323,11 @@ CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv(
 ).split(",") if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
 
-# Face grouping
-# DBSCAN epsilon: max distance between two face embeddings to be in the same cluster.
-# 0.5 works well for dlib 128-d embeddings. Lower = stricter (fewer false positives).
-FACE_CLUSTER_EPS = float(os.getenv("FACE_CLUSTER_EPS", 0.45))
-# Set FACE_DETECTION_ENABLED=False to disable face detection (e.g. when dlib is not installed)
+# Face grouping (InsightFace buffalo_l, cosine distance on ArcFace embeddings)
+# Max average cosine distance between faces in one cluster. Lower = stricter.
+FACE_CLUSTER_COSINE_EPS = float(os.getenv("FACE_CLUSTER_COSINE_EPS", 0.55))
+# Faces below this quality (0..1) don't seed clusters; they only attach to a close match.
+FACE_MIN_QUALITY = float(os.getenv("FACE_MIN_QUALITY", 0.5))
+FACE_ATTACH_MIN_SIM = float(os.getenv("FACE_ATTACH_MIN_SIM", 0.5))
+# Set FACE_DETECTION_ENABLED=False to disable face detection
 FACE_DETECTION_ENABLED = os.getenv("FACE_DETECTION_ENABLED", "True").lower() == "true"

@@ -49,6 +49,8 @@ class Media(models.Model):
     is_favorite = models.BooleanField(default=False)
 
     is_deleted = models.BooleanField(default=False)
+    
+    is_private = models.BooleanField(default=False)
 
     deleted_at = models.DateTimeField(null=True, blank=True)
 
@@ -66,6 +68,9 @@ class Media(models.Model):
 
     source = models.CharField(max_length=20, default='local') # 'local' or 'google'
     external_id = models.CharField(max_length=255, null=True, blank=True, db_index=True)
+    
+    # 512-D CLIP embedding for semantic search
+    clip_embedding = models.JSONField(null=True, blank=True)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="processing")
     upload_error = models.TextField(null=True, blank=True)

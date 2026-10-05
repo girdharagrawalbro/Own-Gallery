@@ -11,7 +11,8 @@ import {
     ToastAndroid,
 } from 'react-native';
 
-import { login, register } from '../../api/auth';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { login, register, googleLogin } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
 
 interface RegisterScreenProps {
@@ -23,11 +24,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [inviteCode, setInviteCode] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleRegister = async () => {
-        if (!username.trim() || !password || !email.trim() || !inviteCode.trim()) {
+        if (!username.trim() || !password || !email.trim()) {
             Alert.alert('Error', 'Please fill in all fields.');
             return;
         }
@@ -39,8 +39,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
             await register(
                 username.trim(),
                 email.trim(),
-                password,
-                inviteCode.trim()
+                password
             );
 
             // 2. Automatically log in after registration
@@ -71,6 +70,37 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
             }
 
             Alert.alert('Registration Failed', errorMsg);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGoogleLogin = async () => {
+        try {
+            setLoading(true);
+
+            // Configure Google Signin (Client ID should come from .env in reality)
+            GoogleSignin.configure({
+                webClientId: '640643261518-jsev2qn560gbdbeoruj3sirspb9fjcsu.apps.googleusercontent.com',
+                offlineAccess: true,
+                scopes: ['https://www.googleapis.com/auth/photoslibrary.readonly'],
+            });
+
+            await GoogleSignin.hasPlayServices();
+            const userInfo = await GoogleSignin.signIn();
+            const serverAuthCode = userInfo.serverAuthCode;
+
+            if (!serverAuthCode) {
+                throw new Error("No server auth code returned from Google.");
+            }
+
+            await googleLogin(serverAuthCode);
+
+            setAuthenticated(true);
+            ToastAndroid.show('Google account linked successfully', ToastAndroid.SHORT);
+        } catch (error: any) {
+            console.error('GOOGLE LOGIN ERROR:', error);
+            Alert.alert('Google Registration Failed', error.message || 'Something went wrong.');
         } finally {
             setLoading(false);
         }
@@ -111,16 +141,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
                     placeholderTextColor="#888"
                 />
 
-                <TextInput
-                    style={[styles.input, { borderColor: '#1a73e8' }]}
-                    placeholder="Secret Invite Code"
-                    value={inviteCode}
-                    onChangeText={setInviteCode}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholderTextColor="#888"
-                />
-
                 <TouchableOpacity
                     style={styles.button}
                     onPress={handleRegister}
@@ -130,6 +150,19 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
                     ) : (
                         <Text style={styles.buttonText}>Register</Text>
                     )}
+                </TouchableOpacity>
+
+                <View style={styles.dividerContainer}>
+                    <View style={styles.divider} />
+                    <Text style={styles.dividerText}>OR</Text>
+                    <View style={styles.divider} />
+                </View>
+
+                <TouchableOpacity
+                    style={[styles.button, styles.googleButton]}
+                    onPress={handleGoogleLogin}
+                    disabled={loading}>
+                    <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -189,5 +222,30 @@ const styles = StyleSheet.create({
         color: '#1a73e8',
         fontSize: 14,
         fontWeight: '500',
+    },
+    dividerContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 24,
+    },
+    divider: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#e0e0e0',
+    },
+    dividerText: {
+        marginHorizontal: 12,
+        color: '#888',
+        fontSize: 14,
+    },
+    googleButton: {
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#ccc',
+    },
+    googleButtonText: {
+        color: '#444',
+        fontSize: 16,
+        fontWeight: '600',
     }
 });

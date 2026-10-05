@@ -42,6 +42,7 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
       try {
         return runPass(prefs)
       } finally {
+        prefs.clearCurrent()
         runLock.unlock()
       }
     } finally {

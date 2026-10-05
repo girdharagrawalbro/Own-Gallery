@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { UserPlus } from 'lucide-react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { api, getErrorMessage } from '../api/client';
 import { useAuth } from '../context/auth';
 
@@ -29,11 +30,33 @@ const Register = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const googleLogin = useGoogleLogin({
+    flow: 'auth-code',
+    scope: 'https://www.googleapis.com/auth/photoslibrary.readonly',
+    onSuccess: async (codeResponse) => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const tokens = await api.googleLogin(codeResponse.code);
+        if (!tokens.access || !tokens.refresh) throw new Error('Login response did not include tokens');
+        const me = await api.me(tokens.access);
+        login(tokens, me);
+        navigate('/', { replace: true });
+      } catch (err) {
+        setError(getErrorMessage(err, 'Google Registration failed.'));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => {
+      setError('Google Registration failed.');
+    },
+  });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,7 +64,7 @@ const Register = () => {
     setError('');
 
     try {
-      await api.register({ username, email, password, invite_code: inviteCode });
+      await api.register({ username, email, password });
       // Sign in straight away and keep both tokens.
       const tokens = await api.login(username, password);
       if (!tokens.access || !tokens.refresh) throw new Error('Login response did not include tokens');
@@ -97,19 +120,27 @@ const Register = () => {
             minLength={8}
             autoComplete="new-password"
           />
-          <input
-            className="input-field"
-            type="text"
-            placeholder="Invite code"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value)}
-            required
-            autoCapitalize="none"
-          />
           <button type="submit" className="btn-primary" disabled={isLoading}>
             {isLoading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
+
+        <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0' }}>
+          <div style={{ flex: 1, height: '1px', backgroundColor: '#e0e0e0' }} />
+          <span style={{ margin: '0 10px', color: '#777', fontSize: '13px' }}>OR</span>
+          <div style={{ flex: 1, height: '1px', backgroundColor: '#e0e0e0' }} />
+        </div>
+
+        <button 
+          type="button"
+          onClick={() => googleLogin()} 
+          className="btn-primary" 
+          style={{ backgroundColor: '#fff', color: '#444', border: '1px solid #ccc', marginBottom: '16px' }}
+          disabled={isLoading}
+        >
+          <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google" style={{ width: '18px', marginRight: '8px', verticalAlign: 'middle' }} />
+          Continue with Google
+        </button>
 
         <div className="auth-footer">
           Already have an account? <Link to="/login">Sign in</Link>

@@ -19,14 +19,17 @@ import {
 import RNFS from 'react-native-fs';
 import { useAuth } from '../../context/AuthContext';
 import { updateProfile, changePassword } from '../../api/auth';
-import { getStats } from '../../api/media';
+import { getStats, type MediaStats } from '../../api/media';
 import { formatBytes } from '../../utils/format';
 import {
+  type BackupFolder,
   type BackupStatus,
   getAutoBackupStatus,
+  getBackupFolders,
   isAutoBackupAvailable,
   requestMediaAccess,
   runAutoBackupNow,
+  setBackupFolders,
   updateAutoBackupSettings,
 } from '../../services/AutoBackupService';
 import { useNavigation } from '@react-navigation/native';
@@ -85,13 +88,48 @@ const SettingsScreen = () => {
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system');
 
-  const [stats, setStats] = useState<{ total_items: number, total_size: number } | null>(null);
+  const [stats, setStats] = useState<MediaStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
   // Auto Backup settings live natively (WorkManager + SharedPreferences); this screen only
   // reads and changes them.
   const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [foldersVisible, setFoldersVisible] = useState(false);
+  const [folders, setFolders] = useState<BackupFolder[]>([]);
+
+  const openFolders = async () => {
+    try {
+      const list = await getBackupFolders();
+      if (list.length === 0) {
+        Alert.alert('No folders', 'Allow photo access first so Own Gallery can see your folders.');
+        return;
+      }
+      setFolders(list);
+      setFoldersVisible(true);
+    } catch (e: any) {
+      Alert.alert('Folders', e?.message || 'Could not read device folders');
+    }
+  };
+
+  const saveFolders = async () => {
+    const chosen = folders.filter(f => f.selected);
+    if (chosen.length === 0) {
+      Alert.alert('Choose a folder', 'Select at least one folder to back up.');
+      return;
+    }
+    // Everything selected = "all folders", so folders created later are included too.
+    const ids = chosen.length === folders.length ? [] : chosen.map(f => f.id);
+    try {
+      await setBackupFolders(ids);
+      setFoldersVisible(false);
+      ToastAndroid.show('Backup folders updated', ToastAndroid.SHORT);
+    } catch (e: any) {
+      Alert.alert('Folders', e?.message || 'Could not save folders');
+    } finally {
+      refreshBackupStatus();
+    }
+  };
 
   const refreshBackupStatus = useCallback(async () => {
     try {
@@ -357,6 +395,19 @@ const SettingsScreen = () => {
                 {backupStatus?.enabled && backupStatus.backedUpCount > 0 && (
                   <Text style={styles.subText}>{backupStatus.backedUpCount} items backed up from this device</Text>
                 )}
+                {backupStatus?.enabled && backupStatus.currentName !== '' && (
+                  <Text style={styles.subText} numberOfLines={1}>
+                    Uploading {backupStatus.currentName} · {backupStatus.currentPercent}%
+                  </Text>
+                )}
+                {backupStatus?.enabled && backupStatus.pendingCount > 0 && (
+                  <Text style={styles.subText}>
+                    {backupStatus.pendingCount} in upload queue · {formatBytes(backupStatus.pendingBytes)}
+                  </Text>
+                )}
+                {backupStatus?.enabled && backupStatus.skippedCount > 0 && (
+                  <Text style={styles.subText}>{backupStatus.skippedCount} skipped (unsupported or too large)</Text>
+                )}
               </View>
               <Switch
                 value={backupStatus?.enabled ?? false}
@@ -377,7 +428,7 @@ const SettingsScreen = () => {
                 trackColor={{ false: '#767577', true: '#34C759' }}
               />
             </View>
-            <View style={[styles.row, !backupStatus?.enabled && styles.noBorder]}>
+            <View style={styles.row}>
               <View style={styles.rowTextBlock}>
                 <Text style={styles.rowText}>Only while charging</Text>
                 <Text style={styles.subText}>Back up when the phone is plugged in</Text>
@@ -389,6 +440,21 @@ const SettingsScreen = () => {
                 trackColor={{ false: '#767577', true: '#34C759' }}
               />
             </View>
+            <TouchableOpacity
+              style={[styles.row, !backupStatus?.enabled && styles.noBorder]}
+              onPress={openFolders}
+              disabled={!backupStatus}
+            >
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText}>Folders to back up</Text>
+                <Text style={styles.subText}>
+                  {backupStatus && backupStatus.selectedFolderCount > 0
+                    ? `${backupStatus.selectedFolderCount} selected`
+                    : 'All folders (Camera, Screenshots, WhatsApp, Downloads…)'}
+                </Text>
+              </View>
+              <ChevronRight size={20} color="#c7c7cc" />
+            </TouchableOpacity>
             {backupStatus?.enabled && (
               <TouchableOpacity style={[styles.row, styles.noBorder]} onPress={backUpNow}>
                 <Text style={[styles.rowText, { color: '#1a73e8' }]}>Back up now</Text>
@@ -401,15 +467,43 @@ const SettingsScreen = () => {
           <Text style={styles.sectionHeader}>CLOUD STORAGE</Text>
           <View style={styles.card}>
             <View style={styles.row}>
+              <View style={styles.rowTextBlock}>
+                <Text style={styles.rowText}>Space Used</Text>
+                <Text style={styles.subText}>
+                  {loadingStats
+                    ? 'Loading...'
+                    : `${formatBytes(stats?.total_size || 0)} · ${stats?.total_items || 0} items`}
+                </Text>
+                {!loadingStats && (stats?.total_size ?? 0) > 0 && (
+                  <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', marginTop: 8, backgroundColor: '#e5e5ea' }}>
+                    <View style={{ flex: stats!.photo_size, backgroundColor: '#007AFF' }} />
+                    <View style={{ flex: stats!.video_size, backgroundColor: '#FF9500' }} />
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={styles.row}>
               <View>
-                <Text style={styles.rowText}>Total Media</Text>
-                <Text style={styles.subText}>{loadingStats ? 'Loading...' : `${stats?.total_items || 0} Items`}</Text>
+                <Text style={styles.rowText}>Photos</Text>
+                <Text style={styles.subText}>
+                  {loadingStats ? 'Loading...' : `${stats?.photo_count || 0} · ${formatBytes(stats?.photo_size || 0)}`}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.row}>
+              <View>
+                <Text style={styles.rowText}>Videos</Text>
+                <Text style={styles.subText}>
+                  {loadingStats ? 'Loading...' : `${stats?.video_count || 0} · ${formatBytes(stats?.video_size || 0)}`}
+                </Text>
               </View>
             </View>
             <View style={[styles.row, styles.noBorder]}>
               <View>
-                <Text style={styles.rowText}>Space Used</Text>
-                <Text style={styles.subText}>{loadingStats ? 'Loading...' : formatBytes(stats?.total_size || 0)}</Text>
+                <Text style={styles.rowText}>Trash</Text>
+                <Text style={styles.subText}>
+                  {loadingStats ? 'Loading...' : `${stats?.trash_count || 0} · ${formatBytes(stats?.trash_size || 0)}`}
+                </Text>
               </View>
             </View>
           </View>
@@ -471,6 +565,42 @@ const SettingsScreen = () => {
         </TouchableOpacity>
 
       </ScrollView>
+
+      {/* Backup folders Modal */}
+      <Modal visible={foldersVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '75%' }]}>
+            <Text style={styles.modalTitle}>Folders to back up</Text>
+            <ScrollView>
+              {folders.map(folder => (
+                <View key={folder.id} style={styles.row}>
+                  <View style={styles.rowTextBlock}>
+                    <Text style={styles.rowText}>{folder.name}</Text>
+                    <Text style={styles.subText}>
+                      {folder.total} items{folder.pending > 0 ? ` · ${folder.pending} not backed up` : ' · backed up'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={folder.selected}
+                    onValueChange={value =>
+                      setFolders(prev => prev.map(f => (f.id === folder.id ? { ...f, selected: value } : f)))
+                    }
+                    trackColor={{ false: '#767577', true: '#34C759' }}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalBtn} onPress={() => setFoldersVisible(false)}>
+                <Text style={styles.modalBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={styles.modalBtn} onPress={saveFolders}>
+                <Text style={[styles.modalBtnText, { color: '#007AFF', fontWeight: 'bold' }]}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit Profile Modal */}
       <Modal visible={editProfileVisible} transparent animationType="slide">

@@ -34,8 +34,9 @@ const MemoriesCarousel = () => {
               <img src={memory.cover_url} alt={memory.title} className="memory-cover" loading="lazy" />
             )}
             <div className="memory-overlay">
+              <h3 className="memory-title">{memory.title}</h3>
               <span className="memory-subtitle">{memory.subtitle}</span>
-              <h3 className="memory-name">{memory.title}</h3>
+              <span className="memory-count">{memory.media_ids.length} photo{memory.media_ids.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
         ))}

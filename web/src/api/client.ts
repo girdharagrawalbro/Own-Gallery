@@ -155,7 +155,7 @@ export const api = {
   // Auth
   login: (username: string, password: string) =>
     apiClient.post<AuthTokens>('/auth/login/', { username, password }).then((r) => r.data),
-  register: (body: { username: string; email: string; password: string; invite_code: string }) =>
+  register: (body: { username: string; email: string; password: string }) =>
     apiClient.post('/auth/register/', body),
   /** Pass `accessToken` to use a token that isn't stored yet (right after login). */
   me: (accessToken?: string) =>

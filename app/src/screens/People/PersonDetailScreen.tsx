@@ -21,7 +21,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Check, MoreVertical, Pencil, X } from 'lucide-react-native';
 import RemoteImage from '../../components/RemoteImage';
-import { getPersonMedia, getPerson, updatePerson, deletePerson } from '../../api/people';
+import { getPersonMedia, getPerson, updatePerson, deletePerson, getPeople, mergePersons } from '../../api/people';
 import { Person } from '../../types/people';
 import { Media } from '../../types/media';
 
@@ -77,6 +77,9 @@ const PersonDetailScreen = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [menuVisible, setMenuVisible] = useState(false);
+    const [mergeModalVisible, setMergeModalVisible] = useState(false);
+    const [peopleList, setPeopleList] = useState<Person[]>([]);
+    const [loadingPeople, setLoadingPeople] = useState(false);
 
     // Inline name editing
     const [editingName, setEditingName] = useState(false);
@@ -149,6 +152,42 @@ const PersonDetailScreen = () => {
                             Alert.alert('Error', 'Failed to remove person');
                         }
                     },
+                },
+            ],
+        );
+    };
+
+    const openMergeModal = async () => {
+        setMenuVisible(false);
+        setMergeModalVisible(true);
+        setLoadingPeople(true);
+        try {
+            const allPeople = await getPeople();
+            setPeopleList(allPeople.filter(p => p.id !== person?.id));
+        } catch (err) {
+            Alert.alert('Error', 'Failed to load people');
+        } finally {
+            setLoadingPeople(false);
+        }
+    };
+
+    const handleMerge = (targetPerson: Person) => {
+        Alert.alert(
+            'Merge Person',
+            `Merge this person into ${targetPerson.display_name}? This cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Merge', style: 'destructive', onPress: async () => {
+                        if (!person) return;
+                        try {
+                            await mergePersons(person.id, targetPerson.id);
+                            setMergeModalVisible(false);
+                            navigation.replace('PersonDetail', { personId: targetPerson.id, personName: targetPerson.display_name });
+                        } catch (err) {
+                            Alert.alert('Error', 'Failed to merge');
+                        }
+                    }
                 },
             ],
         );
@@ -242,6 +281,9 @@ const PersonDetailScreen = () => {
                 <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
                     <View style={StyleSheet.absoluteFill}>
                         <View style={[styles.menu, { top: insets.top + 56, right: 16 }]}>
+                            <TouchableOpacity style={styles.menuItem} onPress={openMergeModal}>
+                                <Text style={styles.menuItemText}>Merge person</Text>
+                            </TouchableOpacity>
                             <TouchableOpacity style={styles.menuItem} onPress={handleHide}>
                                 <Text style={styles.menuItemText}>Hide from People</Text>
                             </TouchableOpacity>
@@ -251,6 +293,41 @@ const PersonDetailScreen = () => {
                         </View>
                     </View>
                 </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Merge modal */}
+            <Modal visible={mergeModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setMergeModalVisible(false)}>
+                <View style={styles.mergeModalContainer}>
+                    <View style={styles.mergeHeader}>
+                        <Text style={styles.mergeHeaderTitle}>Merge into...</Text>
+                        <TouchableOpacity onPress={() => setMergeModalVisible(false)} style={styles.iconBtn}>
+                            <X size={24} color="#3c4043" />
+                        </TouchableOpacity>
+                    </View>
+                    {loadingPeople ? (
+                        <View style={styles.center}>
+                            <ActivityIndicator size="large" color="#1a73e8" />
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={peopleList}
+                            keyExtractor={item => item.id.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity style={styles.mergePersonCell} onPress={() => handleMerge(item)}>
+                                    <View style={styles.mergeAvatarWrapper}>
+                                        <FaceCrop person={item} size={40} />
+                                    </View>
+                                    <Text style={styles.mergePersonName}>{item.display_name}</Text>
+                                </TouchableOpacity>
+                            )}
+                            ListEmptyComponent={
+                                <View style={styles.center}>
+                                    <Text style={styles.emptyLabel}>No other people found</Text>
+                                </View>
+                            }
+                        />
+                    )}
+                </View>
             </Modal>
         </View>
     );
@@ -310,4 +387,11 @@ const styles = StyleSheet.create({
     menuItemText: { fontSize: 15, color: '#3c4043' },
 
     emptyLabel: { fontSize: 15, color: '#888' },
+
+    mergeModalContainer: { flex: 1, backgroundColor: '#fff', paddingTop: 16 },
+    mergeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+    mergeHeaderTitle: { fontSize: 20, fontWeight: '600', color: '#1c1b1f' },
+    mergePersonCell: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0' },
+    mergeAvatarWrapper: { marginRight: 16 },
+    mergePersonName: { fontSize: 16, color: '#1c1b1f' },
 });

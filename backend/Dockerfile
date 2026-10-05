@@ -11,9 +11,7 @@ RUN apt-get update \
        ffmpeg \
        git \
        cmake \
-       build-essential \
-       libopenblas-dev \
-       liblapack-dev \
+        build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 

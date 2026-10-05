@@ -35,6 +35,26 @@ class BackupPreferences(context: Context) {
     }.commit()
   }
 
+  /** MediaStore bucket ids to back up. Empty means every folder on the device. */
+  val selectedFolders: Set<Long>
+    get() = prefs.getStringSet(KEY_FOLDERS, emptySet())?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
+
+  fun setSelectedFolders(ids: Set<Long>) {
+    prefs.edit().putStringSet(KEY_FOLDERS, ids.map { it.toString() }.toSet()).commit()
+  }
+
+  /** Item being uploaded right now (empty when idle), shown as the head of the upload queue. */
+  val currentName: String get() = prefs.getString(KEY_CURRENT_NAME, "") ?: ""
+  val currentPercent: Int get() = prefs.getInt(KEY_CURRENT_PERCENT, 0)
+
+  fun setCurrent(name: String, percent: Int) {
+    prefs.edit().putString(KEY_CURRENT_NAME, name).putInt(KEY_CURRENT_PERCENT, percent).apply()
+  }
+
+  fun clearCurrent() {
+    prefs.edit().remove(KEY_CURRENT_NAME).remove(KEY_CURRENT_PERCENT).apply()
+  }
+
   fun setApiBaseUrl(url: String) {
     prefs.edit().putString(KEY_API_BASE_URL, url.trimEnd('/')).commit()
   }
@@ -69,6 +89,9 @@ class BackupPreferences(context: Context) {
     private const val KEY_ENABLED = "enabled"
     private const val KEY_WIFI_ONLY = "wifi_only"
     private const val KEY_CHARGING_ONLY = "charging_only"
+    private const val KEY_FOLDERS = "selected_folders"
+    private const val KEY_CURRENT_NAME = "current_name"
+    private const val KEY_CURRENT_PERCENT = "current_percent"
     private const val KEY_API_BASE_URL = "api_base_url"
     private const val KEY_ACCESS = "access_token"
     private const val KEY_REFRESH = "refresh_token"

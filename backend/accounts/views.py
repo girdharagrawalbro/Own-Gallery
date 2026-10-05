@@ -82,7 +82,10 @@ class GoogleLoginView(APIView):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         
-        user, created = User.objects.get_or_create(email=email, defaults={"username": email.split('@')[0]})
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            user = User.objects.create(email=email, username=email.split('@')[0])
         
         integration, _ = GoogleIntegration.objects.get_or_create(
             user=user, 
@@ -219,3 +222,65 @@ class GooglePhotosImportView(APIView):
 
         return Response({"detail": f"Started import for {len(media_items)} items."})
 
+
+class PrivatePinStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        return Response({
+            "is_set": bool(request.user.private_pin_hash)
+        })
+
+class SetPrivatePinView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        from django.contrib.auth.hashers import make_password, check_password
+        
+        current_pin = request.data.get("current_pin")
+        new_pin = request.data.get("new_pin")
+        
+        if not new_pin or len(new_pin) < 4:
+            return Response({"detail": "New PIN must be at least 4 characters long."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user = request.user
+        
+        if user.private_pin_hash:
+            if not current_pin:
+                return Response({"detail": "Current PIN is required to set a new PIN."}, status=status.HTTP_400_BAD_REQUEST)
+            if not check_password(current_pin, user.private_pin_hash):
+                return Response({"detail": "Incorrect current PIN."}, status=status.HTTP_400_BAD_REQUEST)
+                
+        user.private_pin_hash = make_password(new_pin)
+        user.save(update_fields=['private_pin_hash'])
+        
+        return Response({"detail": "PIN set successfully."})
+
+class UnlockPrivateGalleryView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        from django.contrib.auth.hashers import check_password
+        import jwt
+        from django.conf import settings
+        from datetime import timedelta
+        from django.utils import timezone
+        
+        pin = request.data.get("pin")
+        user = request.user
+        
+        if not user.private_pin_hash:
+            return Response({"detail": "No PIN has been set."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if not pin or not check_password(pin, user.private_pin_hash):
+            return Response({"detail": "Incorrect PIN."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Issue a short-lived token (e.g., 60 minutes)
+        payload = {
+            "user_id": user.id,
+            "exp": timezone.now() + timedelta(minutes=60),
+            "type": "private_access"
+        }
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+        
+        return Response({"private_token": token})

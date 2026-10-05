@@ -4,6 +4,7 @@ import android.net.Uri
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReadableArray
 import java.util.concurrent.Executors
 
 /**
@@ -43,9 +44,42 @@ class MediaSyncModule(reactContext: ReactApplicationContext) : NativeMediaSyncSp
       null
     }
 
+  override fun getFolders(promise: Promise) = background(promise) {
+    if (!MediaPermissions.canRead(context)) return@background "[]"
+    val selected = prefs.selectedFolders
+    val array = org.json.JSONArray()
+    MediaScanner(context).folders(BackupLedger.get(context).finishedVersions()).forEach { folder ->
+      array.put(
+        org.json.JSONObject()
+          .put("id", folder.id.toString())
+          .put("name", folder.name)
+          .put("total", folder.total)
+          .put("pending", folder.pending)
+          .put("selected", selected.isEmpty() || folder.id in selected),
+      )
+    }
+    array.toString()
+  }
+
+  override fun setFolders(ids: ReadableArray, promise: Promise) = background(promise) {
+    val parsed = (0 until ids.size()).mapNotNull { ids.getString(it)?.toLongOrNull() }.toSet()
+    prefs.setSelectedFolders(parsed)
+    // New folders mean new work: let the scheduler pick it up.
+    if (prefs.enabled) BackupScheduler.apply(context, settingsChanged = true)
+    null
+  }
+
   override fun getStatus(promise: Promise) = background(promise) {
     val states = if (prefs.enabled && prefs.hasCredentials) BackupScheduler.workStates(context) else emptyMap()
     val ledger = BackupLedger.get(context)
+    // Upload queue: items in the chosen folders that aren't backed up yet.
+    val pending = if (prefs.enabled && MediaPermissions.canRead(context)) {
+      MediaScanner(context).pendingItems(ledger.finishedVersions(), prefs.selectedFolders)
+    } else {
+      emptyList()
+    }
+    val pendingCount = pending.size
+    val pendingBytes = pending.sumOf { it.size }
     Arguments.createMap().apply {
       putBoolean("enabled", prefs.enabled)
       putBoolean("wifiOnly", prefs.wifiOnly)
@@ -66,6 +100,11 @@ class MediaSyncModule(reactContext: ReactApplicationContext) : NativeMediaSyncSp
       putString("lastError", prefs.lastError)
       putDouble("backedUpCount", ledger.count(BackupLedger.STATE_DONE).toDouble())
       putDouble("skippedCount", ledger.count(BackupLedger.STATE_SKIPPED).toDouble())
+      putDouble("pendingCount", pendingCount.toDouble())
+      putDouble("pendingBytes", pendingBytes.toDouble())
+      putString("currentName", if (states.values.contains("running")) prefs.currentName else "")
+      putInt("currentPercent", prefs.currentPercent)
+      putDouble("selectedFolderCount", prefs.selectedFolders.size.toDouble())
     }
   }
 

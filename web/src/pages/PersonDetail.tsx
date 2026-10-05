@@ -11,7 +11,19 @@ import { showToast } from '../utils/toast';
 const AVATAR_SIZE = 96;
 
 const FaceAvatar = ({ person }: { person: Person }) => {
-  const { cover_thumbnail_url, cover_face } = person;
+  const { cover_thumbnail_url, cover_face, cover_face_url } = person;
+  const [faceUrlFailed, setFaceUrlFailed] = useState(false);
+  if (cover_face_url && !faceUrlFailed) {
+    return (
+      <img
+        src={cover_face_url}
+        alt={person.display_name}
+        className="people-avatar-img"
+        draggable={false}
+        onError={() => setFaceUrlFailed(true)}
+      />
+    );
+  }
   if (!cover_thumbnail_url) {
     return (
       <div className="people-avatar-placeholder">

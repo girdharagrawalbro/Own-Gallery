@@ -20,8 +20,7 @@ const SearchResults = ({ query }: { query: string }) => {
       collection={collection}
       empty={{
         icon: <SearchIcon size={48} />,
-        title: 'No results',
-        description: `Nothing matched “${query}”. Try a file name, a year like 2024, or a month like September.`,
+        description: `Nothing matched “${query}”. Try natural language like "photos of a red car" or "beach sunset".`,
       }}
       header={
         <header className="page-header">
@@ -45,8 +44,8 @@ const Search = () => {
     return (
       <div className="empty-state">
         <SearchIcon size={48} />
-        <h2>Search your library</h2>
-        <p>Search by file name, a year (2024) or a month (September).</p>
+        <h2>AI Search</h2>
+        <p>Search using natural language, like "photos at the beach", "red car", or "birthday photos".</p>
       </div>
     );
   }

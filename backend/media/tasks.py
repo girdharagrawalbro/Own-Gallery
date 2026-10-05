@@ -277,6 +277,13 @@ def _upload_media_to_telegram(self, media_id):
         except Exception as _exc:
             logger.warning("Could not queue face detection for media %s: %s", media.id, _exc)
 
+        # Queue CLIP embedding generation
+        try:
+            if media.media_type == "image":
+                generate_clip_embedding.apply_async(args=[media.id], countdown=30)
+        except Exception as _exc:
+            logger.warning("Could not queue clip embedding for media %s: %s", media.id, _exc)
+
         try:
             blob_storage.delete_file(blob_name)
         except Exception as exc:
@@ -305,5 +312,28 @@ def _upload_media_to_telegram(self, media_id):
 def delete_telegram_messages(self, message_ids):
     try:
         TelegramStorage().delete_messages(message_ids)
+    except Exception as exc:
+        raise self.retry(exc=exc)
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def generate_clip_embedding(self, media_id):
+    try:
+        media = Media.objects.get(id=media_id)
+        if media.clip_embedding or media.media_type == "video":
+            return
+            
+        from media.search import embed_image
+        from telegram_storage.storage import TelegramFile
+        storage = TelegramStorage()
+
+        if not (media.telegram_message_id or media.telegram_file_id):
+            return
+
+        tg_file = TelegramFile(media.telegram_message_id, media.telegram_file_id, media.file_size)
+        data = b"".join(storage.iter_range(tg_file, 0, media.file_size - 1))
+
+        emb = embed_image(data)
+        media.clip_embedding = emb.tolist()
+        media.save(update_fields=['clip_embedding'])
     except Exception as exc:
         raise self.retry(exc=exc)

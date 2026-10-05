@@ -18,5 +18,6 @@ export interface Person {
   media_count: number;
   cover_face: Face | null;
   cover_thumbnail_url: string | null;
+  cover_face_url?: string | null;
   created_at: string;
 }

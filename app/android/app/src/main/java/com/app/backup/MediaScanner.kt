@@ -10,6 +10,10 @@ import android.provider.MediaStore
 import androidx.core.content.ContextCompat
 
 data class MediaItem(
+  /**
+   * Ledger key. Images and videos have separate MediaStore id spaces, so video ids are negated to
+   * keep the two from colliding (see [MediaScanner.ledgerKey]). Use [uri] to open the file.
+   */
   val id: Long,
   val uri: Uri,
   val displayName: String,
@@ -20,24 +24,66 @@ data class MediaItem(
   val takenAtMillis: Long,
 )
 
+/** A device folder (MediaStore bucket) such as Camera, Screenshots or WhatsApp Images. */
+data class DeviceFolder(
+  val id: Long,
+  val name: String,
+  val total: Int,
+  /** Items in this folder whose current version isn't backed up yet. */
+  val pending: Int,
+)
+
 /** Reads photos and videos from MediaStore and reports which versions aren't backed up yet. */
 class MediaScanner(private val context: Context) {
 
   fun hasReadPermission(): Boolean = MediaPermissions.canRead(context)
 
-  /** Newest first. */
-  fun pendingItems(finished: Map<Long, Pair<Long, Long>>): List<MediaItem> {
+  private fun ledgerKey(mediaStoreId: Long, isVideo: Boolean): Long = if (isVideo) -mediaStoreId else mediaStoreId
+
+  /**
+   * Newest first. [folderIds] limits the scan to those folders; empty means every folder.
+   */
+  fun pendingItems(finished: Map<Long, Pair<Long, Long>>, folderIds: Set<Long> = emptySet()): List<MediaItem> {
     val items = ArrayList<MediaItem>()
-    query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/jpeg", finished, items)
-    query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "video/mp4", finished, items)
+    query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/jpeg", false, finished, folderIds, items)
+    query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "video/mp4", true, finished, folderIds, items)
     items.sortByDescending { it.takenAtMillis }
     return items
+  }
+
+  /** Every folder that holds photos or videos, with how many of its items still need backing up. */
+  fun folders(finished: Map<Long, Pair<Long, Long>>): List<DeviceFolder> {
+    class Acc(var name: String, var total: Int = 0, var pending: Int = 0)
+    val byId = LinkedHashMap<Long, Acc>()
+    for ((collection, isVideo) in listOf(
+      MediaStore.Images.Media.EXTERNAL_CONTENT_URI to false,
+      MediaStore.Video.Media.EXTERNAL_CONTENT_URI to true,
+    )) {
+      val projection = arrayOf(
+        MediaStore.MediaColumns._ID,
+        MediaStore.MediaColumns.SIZE,
+        MediaStore.MediaColumns.DATE_MODIFIED,
+        MediaStore.MediaColumns.BUCKET_ID,
+        MediaStore.MediaColumns.BUCKET_DISPLAY_NAME,
+      )
+      context.contentResolver.query(collection, projection, "${MediaStore.MediaColumns.SIZE} > 0", null, null)?.use { c ->
+        while (c.moveToNext()) {
+          val bucketId = c.getLong(3)
+          val acc = byId.getOrPut(bucketId) { Acc(c.getString(4) ?: "Other") }
+          acc.total++
+          if (finished[ledgerKey(c.getLong(0), isVideo)] != (c.getLong(1) to c.getLong(2))) acc.pending++
+        }
+      }
+    }
+    return byId.map { (id, a) -> DeviceFolder(id, a.name, a.total, a.pending) }.sortedByDescending { it.total }
   }
 
   private fun query(
     collection: Uri,
     fallbackMime: String,
+    isVideo: Boolean,
     finished: Map<Long, Pair<Long, Long>>,
+    folderIds: Set<Long>,
     out: MutableList<MediaItem>,
   ) {
     val projection = arrayOf(
@@ -48,6 +94,7 @@ class MediaScanner(private val context: Context) {
       MediaStore.MediaColumns.DATE_MODIFIED,
       MediaStore.MediaColumns.DATE_ADDED,
       MediaStore.MediaColumns.DATE_TAKEN,
+      MediaStore.MediaColumns.BUCKET_ID,
     )
     val selection = buildString {
       append("${MediaStore.MediaColumns.SIZE} > 0")
@@ -62,15 +109,18 @@ class MediaScanner(private val context: Context) {
       val modifiedCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
       val addedCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
       val takenCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_TAKEN)
+      val bucketCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID)
       while (c.moveToNext()) {
+        if (folderIds.isNotEmpty() && c.getLong(bucketCol) !in folderIds) continue
         val id = c.getLong(idCol)
+        val key = ledgerKey(id, isVideo)
         val size = c.getLong(sizeCol)
         val dateModified = c.getLong(modifiedCol)
-        if (finished[id] == (size to dateModified)) continue
+        if (finished[key] == (size to dateModified)) continue
 
         val taken = if (c.isNull(takenCol)) 0L else c.getLong(takenCol)
         out += MediaItem(
-          id = id,
+          id = key,
           uri = ContentUris.withAppendedId(collection, id),
           displayName = c.getString(nameCol) ?: "media_$id",
           mimeType = c.getString(mimeCol) ?: fallbackMime,
