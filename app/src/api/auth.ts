@@ -75,3 +75,19 @@ export const googleLogin = async (authCode: string): Promise<LoginResponse> => {
 export const startGoogleSync = async (): Promise<void> => {
     await api.post('/auth/google/sync/');
 };
+
+// Private Gallery
+export const getPrivatePinStatus = async (): Promise<{ is_set: boolean }> => {
+    const response = await api.get<{ is_set: boolean }>('/auth/private-pin/status/');
+    return response.data;
+};
+
+export const setPrivatePin = async (newPin: string, currentPin?: string): Promise<any> => {
+    const response = await api.post('/auth/private-pin/set/', { new_pin: newPin, current_pin: currentPin });
+    return response.data;
+};
+
+export const unlockPrivateGallery = async (pin: string): Promise<{ private_token: string }> => {
+    const response = await api.post<{ private_token: string }>('/auth/private-pin/unlock/', { pin });
+    return response.data;
+};

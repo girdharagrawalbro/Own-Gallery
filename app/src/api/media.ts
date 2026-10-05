@@ -42,6 +42,16 @@ export const getMemories = async (): Promise<any[]> => {
   return response.data.memories;
 };
 
+export const getPlaces = async (): Promise<any[]> => {
+  const response = await api.get<{ places: any[] }>('/media/places/');
+  return response.data.places;
+};
+
+export const getStorageAssistant = async (): Promise<any> => {
+  const response = await api.get<any>('/media/storage-assistant/');
+  return response.data;
+};
+
 export const toggleFavorite = async (id: number, isFavorite: boolean): Promise<Media> => {
   const response = await api.patch<Media>(`/media/${id}/`, {
     is_favorite: isFavorite,
@@ -197,6 +207,14 @@ export const bulkTrash = async (mediaIds: number[]): Promise<void> => {
 
 export const bulkFavorite = async (mediaIds: number[], isFavorite: boolean = true): Promise<void> => {
   await api.post('/media/bulk-favorite/', { media_ids: mediaIds, is_favorite: isFavorite });
+};
+
+export const bulkPrivate = async (mediaIds: number[]): Promise<void> => {
+  await api.post('/media/bulk-private/', { media_ids: mediaIds });
+};
+
+export const bulkUnprivate = async (mediaIds: number[]): Promise<void> => {
+  await api.post('/media/bulk-unprivate/', { media_ids: mediaIds });
 };
 
 export const updateTakenAt = async (id: number, takenAt: Date): Promise<Media> => {

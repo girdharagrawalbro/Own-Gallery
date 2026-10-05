@@ -174,6 +174,10 @@ export const api = {
       .then((r) => r.data),
   getMemories: () =>
     apiClient.get<{ memories: any[] }>('/media/memories/').then((r) => r.data.memories),
+  getPlaces: () =>
+    apiClient.get<{ places: any[] }>('/media/places/').then((r) => r.data.places),
+  getStorageAssistant: () =>
+    apiClient.get<any>('/media/storage-assistant/').then((r) => r.data),
   timeline: (filters: MediaFilters) =>
     apiClient.get<{ months: TimelineMonth[] }>('/media/timeline/', { params: filters }).then((r) => r.data.months),
   getMedia: (id: number, signal?: AbortSignal) =>
@@ -194,6 +198,10 @@ export const api = {
     apiClient.post('/media/bulk-favorite/', { media_ids: ids, is_favorite: isFavorite }),
   bulkUpdateTakenAt: (ids: number[], takenAt: Date) =>
     apiClient.post('/media/bulk-update-taken-at/', { media_ids: ids, taken_at: takenAt.toISOString() }),
+  bulkPrivate: (ids: number[]) =>
+    apiClient.post('/media/bulk-private/', { media_ids: ids }),
+  bulkUnprivate: (ids: number[]) =>
+    apiClient.post('/media/bulk-unprivate/', { media_ids: ids }),
   trash: (id: number) => apiClient.post(`/media/${id}/trash/`),
   bulkTrash: (ids: number[]) => apiClient.post('/media/bulk-trash/', { media_ids: ids }),
   restore: (id: number) => apiClient.post(`/media/${id}/restore/`),
@@ -268,6 +276,14 @@ export const api = {
     apiClient.get(`/auth/google/photos/${pageToken ? `?pageToken=${pageToken}` : ''}`).then((r) => r.data),
   importGooglePhotos: (mediaItems: any[]) =>
     apiClient.post('/auth/google/import/', { mediaItems }).then((r) => r.data),
+
+  // Private Gallery
+  getPrivatePinStatus: () =>
+    apiClient.get<{ is_set: boolean }>('/auth/private-pin/status/').then((r) => r.data),
+  setPrivatePin: (newPin: string, currentPin?: string) =>
+    apiClient.post('/auth/private-pin/set/', { new_pin: newPin, current_pin: currentPin }).then((r) => r.data),
+  unlockPrivateGallery: (pin: string) =>
+    apiClient.post<{ private_token: string }>('/auth/private-pin/unlock/', { pin }).then((r) => r.data),
 };
 
 
