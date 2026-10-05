@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Cloud, CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Trash2, Upload, User, Users, X, Download } from 'lucide-react';
+import { Cloud, CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Smartphone, Trash2, Upload, User, Users, X } from 'lucide-react';
 
 import { useAuth } from '../context/auth';
 import { useUploadActions } from '../context/uploads';
@@ -188,6 +188,9 @@ const Layout = () => {
               <Upload size={18} />
               <span>Upload</span>
             </button>
+            <a href="/own-gallery.apk" download className="btn-icon" title="Download Android App" aria-label="Download App" style={{ color: 'inherit' }}>
+              <Smartphone size={22} />
+            </a>
             <button className="btn-icon" onClick={() => setShowSettings(true)} title="Settings" aria-label="Settings">
               <Settings size={22} />
             </button>
