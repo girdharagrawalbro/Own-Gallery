@@ -326,6 +326,6 @@ CORS_ALLOW_CREDENTIALS = True
 # Face grouping
 # DBSCAN epsilon: max distance between two face embeddings to be in the same cluster.
 # 0.5 works well for dlib 128-d embeddings. Lower = stricter (fewer false positives).
-FACE_CLUSTER_EPS = float(os.getenv("FACE_CLUSTER_EPS", 0.5))
+FACE_CLUSTER_EPS = float(os.getenv("FACE_CLUSTER_EPS", 0.45))
 # Set FACE_DETECTION_ENABLED=False to disable face detection (e.g. when dlib is not installed)
 FACE_DETECTION_ENABLED = os.getenv("FACE_DETECTION_ENABLED", "True").lower() == "true"

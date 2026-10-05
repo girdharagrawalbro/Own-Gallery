@@ -136,6 +136,13 @@ def detect_faces(self, media_id: int):
         raise self.retry(exc=exc)
 
 
+def _face_pixel_area(face):
+    """Approximate face size in source pixels (boxes are stored as fractions)."""
+    width = face.media.width or 1
+    height = face.media.height or 1
+    return (face.box_right - face.box_left) * width * (face.box_bottom - face.box_top) * height
+
+
 def _assign_single_face(face, user_id):
     """DBSCAN needs 2+ samples, so a lone face gets its own Person directly."""
     from .models import Person
@@ -181,7 +188,7 @@ def cluster_faces(self, user_id: int):
 
     try:
         import numpy as np
-        from sklearn.cluster import DBSCAN
+        from sklearn.cluster import AgglomerativeClustering
     except ImportError:
         logger.warning("scikit-learn not installed – skipping clustering for user %s", user_id)
         return
@@ -189,8 +196,14 @@ def cluster_faces(self, user_id: int):
     try:
         embeddings = np.array([f.embedding for f in faces])
 
-        eps = getattr(settings, "FACE_CLUSTER_EPS", 0.5)
-        db = DBSCAN(eps=eps, min_samples=2, metric="euclidean", n_jobs=-1).fit(embeddings)
+        eps = getattr(settings, "FACE_CLUSTER_EPS", 0.45)
+        # Use AgglomerativeClustering to prevent chaining (different people merging)
+        db = AgglomerativeClustering(
+            n_clusters=None,
+            distance_threshold=eps,
+            metric="euclidean",
+            linkage="average"
+        ).fit(embeddings)
         labels = db.labels_
 
         # Build label → list of faces mapping
@@ -231,12 +244,15 @@ def cluster_faces(self, user_id: int):
             face_ids = [f.pk for f in cluster_faces_list]
             Face.objects.filter(pk__in=face_ids).update(person=person)
 
-            # Set cover face to the most central face (smallest average distance)
+            # Cover face: among the more typical half of the cluster (closest to the
+            # centroid, so it's really this person), take the largest face in pixels
+            # — big faces give sharp avatars, tiny background faces look blurry.
             embeddings_cluster = np.array([f.embedding for f in cluster_faces_list])
             centroid = embeddings_cluster.mean(axis=0)
             distances = np.linalg.norm(embeddings_cluster - centroid, axis=1)
-            best_idx = int(np.argmin(distances))
-            best_face = cluster_faces_list[best_idx]
+            cutoff = float(np.median(distances))
+            candidates = [f for f, d in zip(cluster_faces_list, distances) if d <= cutoff]
+            best_face = max(candidates, key=_face_pixel_area)
 
             if person.cover_face_id != best_face.pk:
                 person.cover_face = best_face

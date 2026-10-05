@@ -26,6 +26,8 @@ class PersonListSerializer(serializers.ModelSerializer):
     media_count = serializers.SerializerMethodField()
     # Thumbnail URL of the cover face's media, cropped to the face bbox
     cover_thumbnail_url = serializers.SerializerMethodField()
+    # Server-side square crop of the cover face from the high-res preview (sharp)
+    cover_face_url = serializers.SerializerMethodField()
     cover_face = FaceSerializer(read_only=True)
 
     class Meta:
@@ -39,6 +41,7 @@ class PersonListSerializer(serializers.ModelSerializer):
             "media_count",
             "cover_face",
             "cover_thumbnail_url",
+            "cover_face_url",
             "created_at",
         ]
         read_only_fields = [
@@ -48,6 +51,7 @@ class PersonListSerializer(serializers.ModelSerializer):
             "media_count",
             "cover_face",
             "cover_thumbnail_url",
+            "cover_face_url",
             "created_at",
         ]
 
@@ -66,6 +70,14 @@ class PersonListSerializer(serializers.ModelSerializer):
             return None
         request = self.context.get("request")
         path = signed_path(media_id, "thumbnail")
+        return request.build_absolute_uri(path) if request else path
+
+    def get_cover_face_url(self, obj):
+        face = obj.cover_face or obj.faces.order_by("id").first()
+        if face is None:
+            return None
+        request = self.context.get("request")
+        path = signed_path(face.media_id, "face", face=face.id)
         return request.build_absolute_uri(path) if request else path
 
 

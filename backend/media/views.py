@@ -37,7 +37,9 @@ from .tasks import apply_taken_at, delete_telegram_messages, requeue_stalled, up
 
 logger = logging.getLogger(__name__)
 
-FILE_ACTIONS = {"content", "thumbnail", "preview", "download"}
+FILE_ACTIONS = {"content", "thumbnail", "preview", "download", "face"}
+FACE_CROP_SIZE = 256
+FACE_CROP_PADDING = 0.35  # extra margin around the detected box, as a fraction of its size
 MONTHS = {name.lower(): number for number, name in enumerate(calendar.month_name) if name}
 MONTHS.update({name.lower(): number for number, name in enumerate(calendar.month_abbr) if name})
 
@@ -350,8 +352,74 @@ class MediaViewSet(viewsets.ModelViewSet):
             cache.set(cache_key, data, timeout=7 * 24 * 3600 if data else 24 * 3600)
         return data or None
 
+    @action(detail=True, methods=["get"], url_path="face")
+    def face(self, request, pk=None):
+        """Sharp square crop of one detected face, cut from the high-res preview."""
+        media = self._file_media(request, pk)
+        face_id = request.query_params.get("face", "")
+        if not face_id.isdigit():
+            raise Http404("Face not found.")
+
+        from people.models import Face
+
+        face = Face.objects.filter(pk=int(face_id), media=media).first()
+        if face is None:
+            raise Http404("Face not found.")
+
+        def handler():
+            file_cache = caches["file_cache"]
+            cache_key = f"face:{face.id}:crop:v1"
+            data = file_cache.get(cache_key)
+            if data is None:
+                source = (
+                    self._preview_bytes(media)
+                    or self._original_bytes_if_small(media)
+                    or self._thumbnail_bytes(media)
+                )
+                if not source:
+                    raise Http404("Face image not available.")
+                data = self._crop_face(source, face)
+                file_cache.set(cache_key, data)
+            return bytes_response(request, data, content_type="image/jpeg", etag=f'"f{face.id}-v1"')
+
+        return self._guard(handler)
+
     @staticmethod
-    def _preview_response(request, media):
+    def _crop_face(source, face):
+        import io
+
+        from PIL import Image
+
+        # No EXIF transpose: face_recognition detected on the raw decoded pixels.
+        img = Image.open(io.BytesIO(source)).convert("RGB")
+        w, h = img.size
+        left, right = face.box_left * w, face.box_right * w
+        top, bottom = face.box_top * h, face.box_bottom * h
+        cx, cy = (left + right) / 2, (top + bottom) / 2
+        side = max(right - left, bottom - top) * (1 + 2 * FACE_CROP_PADDING)
+        side = min(side, w, h)
+        x0 = min(max(cx - side / 2, 0), w - side)
+        y0 = min(max(cy - side / 2, 0), h - side)
+        crop = img.crop((round(x0), round(y0), round(x0 + side), round(y0 + side)))
+        if crop.width > FACE_CROP_SIZE:
+            crop = crop.resize((FACE_CROP_SIZE, FACE_CROP_SIZE), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        crop.save(out, format="JPEG", quality=90)
+        return out.getvalue()
+
+    @staticmethod
+    def _original_bytes_if_small(media, max_size=15 * 1024 * 1024):
+        if media.media_type != "image" or media.mime_type not in processing.BROWSER_IMAGE_TYPES:
+            return None
+        if not media.file_size or media.file_size > max_size:
+            return None
+        if not (media.telegram_message_id or media.telegram_file_id):
+            return None
+        tg_file = TelegramFile(media.telegram_message_id, media.telegram_file_id, media.file_size)
+        return b"".join(TelegramStorage().iter_range(tg_file, 0, media.file_size - 1))
+
+    @staticmethod
+    def _preview_bytes(media):
         variant = media.variants.filter(kind=MediaVariant.PREVIEW).first()
         if not variant:
             return None
@@ -362,6 +430,14 @@ class MediaViewSet(viewsets.ModelViewSet):
             tg_file = TelegramFile(variant.telegram_message_id, variant.telegram_file_id, variant.file_size)
             data = b"".join(TelegramStorage().iter_range(tg_file, 0, variant.file_size - 1))
             file_cache.set(cache_key, data)
+        return data
+
+    @classmethod
+    def _preview_response(cls, request, media):
+        variant = media.variants.filter(kind=MediaVariant.PREVIEW).first()
+        if not variant:
+            return None
+        data = cls._preview_bytes(media)
         return bytes_response(request, data, content_type=variant.mime_type,
                               etag=f'"p{media.id}-{variant.telegram_message_id or variant.id}"')
 
