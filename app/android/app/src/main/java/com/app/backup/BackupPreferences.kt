@@ -11,7 +11,7 @@ class BackupPreferences(context: Context) {
 
   private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-  val enabled: Boolean get() = prefs.getBoolean(KEY_ENABLED, false)
+  val enabled: Boolean get() = prefs.getBoolean(KEY_ENABLED, true)
   val wifiOnly: Boolean get() = prefs.getBoolean(KEY_WIFI_ONLY, true)
   val chargingOnly: Boolean get() = prefs.getBoolean(KEY_CHARGING_ONLY, false)
 

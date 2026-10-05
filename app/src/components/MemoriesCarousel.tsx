@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { Sparkles } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
-import { getMemories } from '../api/media';
+import { getMemories, getMediaStatuses } from '../api/media';
+import MediaViewer from '../screens/Gallery/MediaViewer';
+import { Media } from '../types/media';
 
 export interface Memory {
     id: string;
@@ -16,6 +18,14 @@ const MemoriesCarousel = () => {
     const { data: memories = [], isLoading: loading } = useQuery<Memory[]>({
         queryKey: ['memories'],
         queryFn: () => getMemories(),
+    });
+
+    const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
+
+    const { data: memoryMedia = [] } = useQuery<Media[]>({
+        queryKey: ['memory-media', selectedMemory?.id],
+        queryFn: () => getMediaStatuses(selectedMemory!.media_ids),
+        enabled: !!selectedMemory && selectedMemory.media_ids.length > 0,
     });
 
     if (loading || memories.length === 0) return null;
@@ -33,7 +43,14 @@ const MemoriesCarousel = () => {
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 {memories.map((memory) => (
-                    <TouchableOpacity key={memory.id} style={styles.card} activeOpacity={0.8}>
+                    <TouchableOpacity
+                        key={memory.id}
+                        style={styles.card}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                            setSelectedMemory(memory);
+                        }}
+                    >
                         {memory.cover_url && (
                             <Image source={{ uri: memory.cover_url }} style={styles.cover} />
                         )}
@@ -44,6 +61,13 @@ const MemoriesCarousel = () => {
                     </TouchableOpacity>
                 ))}
             </ScrollView>
+
+            <MediaViewer
+                visible={!!selectedMemory && memoryMedia.length > 0}
+                media={memoryMedia}
+                initialIndex={0}
+                onClose={() => setSelectedMemory(null)}
+            />
         </View>
     );
 };

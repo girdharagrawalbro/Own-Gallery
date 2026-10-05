@@ -186,6 +186,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         paddingHorizontal: 16,
         marginBottom: 16,
+        color: '#000',
     },
 
     button: {

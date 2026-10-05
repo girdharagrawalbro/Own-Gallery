@@ -58,9 +58,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
             
             let errorMsg = 'Failed to create account.';
             if (error?.response?.data) {
-                if (error.response.data.invite_code) {
-                    errorMsg = error.response.data.invite_code[0];
-                } else if (error.response.data.username) {
+                if (error.response.data.username) {
                     errorMsg = `Username: ${error.response.data.username[0]}`;
                 } else if (error.response.data.email) {
                     errorMsg = `Email: ${error.response.data.email[0]}`;
@@ -199,6 +197,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         paddingHorizontal: 16,
         marginBottom: 16,
+        color: '#000',
     },
     button: {
         height: 50,

@@ -17,6 +17,7 @@ RUN apt-get update \
 
 COPY requirements.txt .
 
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir --default-timeout=180 -r requirements.txt
 
 COPY . .
