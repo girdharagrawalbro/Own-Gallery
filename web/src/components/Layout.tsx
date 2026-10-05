@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Cloud, CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Smartphone, Trash2, Upload, User, Users, X } from 'lucide-react';
+import { Cloud, CloudUpload, FolderHeart, Heart, Image as ImageIcon, Search, Settings, Smartphone, Trash2, Upload, User, Users, X, Download } from 'lucide-react';
 
 import { useAuth } from '../context/auth';
 import { useUploadActions } from '../context/uploads';
@@ -164,7 +164,7 @@ const Layout = () => {
               {label}
             </NavLink>
           ))}
-          <a href="/own-gallery.apk" className="sidebar-item" style={{ marginTop: 'auto' }} title="Download Android App">
+          <a href="https://drive.google.com/file/d/1UxYB5U0WOu6MygbLriP5lUQ8wwTMKrk6/view?usp=sharing" target="_blank" rel="noopener noreferrer" className="sidebar-item" style={{ marginTop: 'auto' }} title="Download Android App">
             <Download size={20} />
             Get Android App
           </a>
