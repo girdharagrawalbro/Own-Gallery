@@ -6,8 +6,7 @@ from rest_framework_simplejwt.views import (
 
 from .views import (
     RegisterView, UserDetailView, ChangePasswordView, 
-    GoogleLoginView, GoogleSyncView, 
-    GooglePhotosListView, GooglePhotosImportView,
+    GoogleLoginView,
     PrivatePinStatusView, SetPrivatePinView, UnlockPrivateGalleryView
 )
 
@@ -18,9 +17,7 @@ urlpatterns = [
     path("me/", UserDetailView.as_view()),
     path("change-password/", ChangePasswordView.as_view()),
     path("google/", GoogleLoginView.as_view()),
-    path("google/sync/", GoogleSyncView.as_view()),
-    path("google/photos/", GooglePhotosListView.as_view()),
-    path("google/import/", GooglePhotosImportView.as_view()),
+
     path("private-pin/status/", PrivatePinStatusView.as_view()),
     path("private-pin/set/", SetPrivatePinView.as_view()),
     path("private-pin/unlock/", UnlockPrivateGalleryView.as_view()),

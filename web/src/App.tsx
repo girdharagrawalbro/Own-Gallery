@@ -7,7 +7,7 @@ import { UploadProvider } from './context/UploadContext';
 import AlbumDetail from './pages/AlbumDetail';
 import Albums from './pages/Albums';
 import Favorites from './pages/Favorites';
-import GooglePhotosPicker from './pages/GooglePhotosPicker';
+
 import Login from './pages/Login';
 import MediaGrid from './pages/MediaGrid';
 import People from './pages/People';
@@ -58,7 +58,7 @@ const AppRoutes = () => (
         <Route path="/people/:id" element={<PersonDetail />} />
         <Route path="/search" element={<Search />} />
         <Route path="/trash" element={<TrashGrid />} />
-        <Route path="/google-photos" element={<GooglePhotosPicker />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
 
     </Route>

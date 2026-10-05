@@ -83,7 +83,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
             GoogleSignin.configure({
                 webClientId: '640643261518-jsev2qn560gbdbeoruj3sirspb9fjcsu.apps.googleusercontent.com',
                 offlineAccess: true,
-                scopes: ['https://www.googleapis.com/auth/photoslibrary.readonly'],
             });
 
             await GoogleSignin.hasPlayServices();

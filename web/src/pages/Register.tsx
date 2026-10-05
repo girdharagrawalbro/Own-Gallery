@@ -37,7 +37,6 @@ const Register = () => {
 
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
-    scope: 'https://www.googleapis.com/auth/photoslibrary.readonly',
     onSuccess: async (codeResponse) => {
       setIsLoading(true);
       setError('');

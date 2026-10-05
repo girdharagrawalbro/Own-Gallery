@@ -272,14 +272,7 @@ export const api = {
   // Google Integration
   googleLogin: (authCode: string) =>
     apiClient.post<AuthTokens>('/auth/google/', { auth_code: authCode }).then((r) => r.data),
-  getGoogleSyncStatus: () =>
-    apiClient.get('/auth/google/sync/').then((r) => r.data),
-  startGoogleSync: () =>
-    apiClient.post('/auth/google/sync/').then((r) => r.data),
-  fetchGooglePhotos: (pageToken?: string) =>
-    apiClient.get(`/auth/google/photos/${pageToken ? `?pageToken=${pageToken}` : ''}`).then((r) => r.data),
-  importGooglePhotos: (mediaItems: any[]) =>
-    apiClient.post('/auth/google/import/', { mediaItems }).then((r) => r.data),
+
 
   // Private Gallery
   getPrivatePinStatus: () =>

@@ -12,7 +12,7 @@ import TrashScreen from '../screens/Trash/TrashScreen';
 import SettingsScreen from '../screens/Settings/SettingsScreen';
 import PeopleScreen from '../screens/People/PeopleScreen';
 import PersonDetailScreen from '../screens/People/PersonDetailScreen';
-import GooglePhotosPickerScreen from '../screens/GooglePhotosPickerScreen';
+
 
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 
@@ -73,7 +73,7 @@ const AppNavigator = () => (
         <RootStack.Screen name="CreateAlbum" component={CreateAlbumScreen} options={slide} />
         <RootStack.Screen name="PersonDetail" component={PersonDetailScreen} options={slide} />
         <RootStack.Screen name="Settings" component={SettingsScreen} options={slide} />
-        <RootStack.Screen name="GooglePhotosPicker" component={GooglePhotosPickerScreen} options={slide} />
+
       </RootStack.Navigator>
     </NavigationContainer>
   </SafeAreaProvider>
