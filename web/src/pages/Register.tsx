@@ -146,7 +146,7 @@ const Register = () => {
         </div>
 
         <div style={{ marginTop: '16px', textAlign: 'center' }}>
-          <a href="/own-gallery.apk" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#e8f0fe', color: '#1a73e8', textDecoration: 'none', width: '100%' }}>
+          <a href="https://drive.google.com/file/d/1UxYB5U0WOu6MygbLriP5lUQ8wwTMKrk6/view?usp=sharing" target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#e8f0fe', color: '#1a73e8', textDecoration: 'none', width: '100%' }}>
             <Download size={18} />
             Download Android App
           </a>
