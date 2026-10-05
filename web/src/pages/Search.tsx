@@ -20,6 +20,7 @@ const SearchResults = ({ query }: { query: string }) => {
       collection={collection}
       empty={{
         icon: <SearchIcon size={48} />,
+        title: 'No results found',
         description: `Nothing matched “${query}”. Try natural language like "photos of a red car" or "beach sunset".`,
       }}
       header={

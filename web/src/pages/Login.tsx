@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, Download } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { api, getErrorMessage } from '../api/client';
 import { useAuth } from '../context/auth';
@@ -109,6 +109,13 @@ const Login = () => {
 
         <div className="auth-footer">
           Don't have an account? <Link to="/register">Create one</Link>
+        </div>
+        
+        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+          <a href="/own-gallery.apk" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#e8f0fe', color: '#1a73e8', textDecoration: 'none', width: '100%' }}>
+            <Download size={18} />
+            Download Android App
+          </a>
         </div>
       </div>
     </div>

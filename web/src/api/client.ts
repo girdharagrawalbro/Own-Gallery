@@ -70,6 +70,10 @@ apiClient.interceptors.request.use((config) => {
   if (token && !config.headers.has('Authorization')) {
     config.headers.set('Authorization', `Bearer ${token}`);
   }
+  const privateToken = sessionStorage.getItem('private_token');
+  if (privateToken && !config.headers.has('X-Private-Token')) {
+    config.headers.set('X-Private-Token', privateToken);
+  }
   return config;
 });
 

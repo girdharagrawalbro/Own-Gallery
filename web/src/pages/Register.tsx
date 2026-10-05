@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Download } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { api, getErrorMessage } from '../api/client';
 import { useAuth } from '../context/auth';
@@ -144,6 +144,13 @@ const Register = () => {
 
         <div className="auth-footer">
           Already have an account? <Link to="/login">Sign in</Link>
+        </div>
+
+        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+          <a href="/own-gallery.apk" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#e8f0fe', color: '#1a73e8', textDecoration: 'none', width: '100%' }}>
+            <Download size={18} />
+            Download Android App
+          </a>
         </div>
       </div>
     </div>
