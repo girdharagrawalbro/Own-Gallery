@@ -23,6 +23,7 @@ import { ArrowLeft, Check, MoreVertical, Pencil, X } from 'lucide-react-native';
 import RemoteImage from '../../components/RemoteImage';
 import { getPersonMedia, getPerson, updatePerson, deletePerson, getPeople, mergePersons } from '../../api/people';
 import { Person } from '../../types/people';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import { Media } from '../../types/media';
 
 const { width } = Dimensions.get('window');
@@ -66,6 +67,8 @@ const FaceCrop = ({ person, size }: { person: Person; size: number }) => {
 };
 
 const PersonDetailScreen = () => {
+    const { colors, isDark } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<any>();
     const route = useRoute<any>();
     const insets = useSafeAreaInsets();
@@ -242,16 +245,16 @@ const PersonDetailScreen = () => {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="#fff" />
 
             {/* Header */}
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12} style={styles.iconBtn}>
-                    <ArrowLeft size={24} color="#3c4043" />
+                    <ArrowLeft size={24} color={colors.onSurface} />
                 </TouchableOpacity>
                 <View style={{ flex: 1 }} />
                 <TouchableOpacity onPress={() => setMenuVisible(true)} hitSlop={12} style={styles.iconBtn}>
-                    <MoreVertical size={22} color="#3c4043" />
+                    <MoreVertical size={22} color={colors.onSurface} />
                 </TouchableOpacity>
             </View>
 
@@ -301,7 +304,7 @@ const PersonDetailScreen = () => {
                     <View style={styles.mergeHeader}>
                         <Text style={styles.mergeHeaderTitle}>Merge into...</Text>
                         <TouchableOpacity onPress={() => setMergeModalVisible(false)} style={styles.iconBtn}>
-                            <X size={24} color="#3c4043" />
+                            <X size={24} color={colors.onSurface} />
                         </TouchableOpacity>
                     </View>
                     {loadingPeople ? (
@@ -335,8 +338,8 @@ const PersonDetailScreen = () => {
 
 export default PersonDetailScreen;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.surface },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 },
 
     header: {
@@ -344,19 +347,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 8,
         paddingBottom: 8,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
     },
     iconBtn: { padding: 10 },
 
     profileArea: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20 },
     avatarShadow: {
-        shadowColor: '#000',
+        shadowColor: colors.onSurface,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.15,
         shadowRadius: 8,
         elevation: 5,
         borderRadius: 48,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
         marginBottom: 14,
     },
     avatarPlaceholder: { backgroundColor: '#e8e8e8' },
@@ -373,10 +376,10 @@ const styles = StyleSheet.create({
 
     menu: {
         position: 'absolute',
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
         borderRadius: 12,
         elevation: 8,
-        shadowColor: '#000',
+        shadowColor: colors.onSurface,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 8,
@@ -384,11 +387,11 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     menuItem: { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0' },
-    menuItemText: { fontSize: 15, color: '#3c4043' },
+    menuItemText: { fontSize: 15, color: colors.onSurface },
 
     emptyLabel: { fontSize: 15, color: '#888' },
 
-    mergeModalContainer: { flex: 1, backgroundColor: '#fff', paddingTop: 16 },
+    mergeModalContainer: { flex: 1, backgroundColor: colors.surface, paddingTop: 16 },
     mergeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
     mergeHeaderTitle: { fontSize: 20, fontWeight: '600', color: '#1c1b1f' },
     mergePersonCell: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#f0f0f0' },

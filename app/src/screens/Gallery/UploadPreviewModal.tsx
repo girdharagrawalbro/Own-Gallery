@@ -11,6 +11,7 @@ import {
 import { Asset, launchImageLibrary } from 'react-native-image-picker';
 import { Trash2, Plus } from 'lucide-react-native';
 import { useUploadActions } from '../../context/UploadContext';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 
 interface Props {
     visible: boolean;
@@ -21,6 +22,8 @@ interface Props {
 }
 
 const UploadPreviewModal = ({ visible, assets: initialAssets, albumId, onClose, onUploadComplete }: Props) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const { uploadFiles } = useUploadActions();
     const [localAssets, setLocalAssets] = useState<Asset[]>([]);
 
@@ -117,10 +120,10 @@ const UploadPreviewModal = ({ visible, assets: initialAssets, albumId, onClose, 
 
 export default UploadPreviewModal;
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
     },
     header: {
         flexDirection: 'row',
@@ -128,7 +131,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: colors.border,
     },
     headerLeft: {
         flex: 1,
@@ -170,7 +173,7 @@ const styles = StyleSheet.create({
         width: 60,
         height: 60,
         borderRadius: 4,
-        backgroundColor: '#eee',
+        backgroundColor: colors.border,
     },
     infoContainer: {
         flex: 1,
@@ -180,7 +183,7 @@ const styles = StyleSheet.create({
     fileName: {
         fontSize: 14,
         fontWeight: '500',
-        color: '#333',
+        color: colors.onSurface,
     },
     removeBtn: {
         padding: 12,
@@ -196,7 +199,7 @@ const styles = StyleSheet.create({
     footer: {
         padding: 16,
         borderTopWidth: 1,
-        borderTopColor: '#eee',
+        borderTopColor: colors.border,
     },
     uploadBtn: {
         backgroundColor: '#007AFF',
@@ -208,7 +211,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#99ccff',
     },
     uploadBtnText: {
-        color: '#fff',
+        color: colors.surface,
         fontSize: 16,
         fontWeight: '600',
     },

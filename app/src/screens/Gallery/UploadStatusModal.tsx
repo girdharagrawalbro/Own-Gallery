@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { RotateCcw } from 'lucide-react-native';
 import { isFinishedUpload, UploadTask, UploadTaskStatus, useUploads } from '../../context/UploadContext';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 
 interface Props {
     visible: boolean;
@@ -79,6 +80,8 @@ const TaskRow = React.memo(({ item, onCancel, onRetry }: RowProps) => (
 ));
 
 const UploadStatusModal = ({ visible, onClose }: Props) => {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
     const { tasks, clearCompletedTasks, cancelTask, retryTask, retryAllFailed } = useUploads();
 
     const sortedTasks = useMemo(
@@ -133,15 +136,15 @@ const UploadStatusModal = ({ visible, onClose }: Props) => {
 
 export default UploadStatusModal;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.surface },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: colors.border,
     },
     headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111' },
     closeBtn: { padding: 8 },
@@ -155,10 +158,10 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         padding: 8,
     },
-    thumbnail: { width: 56, height: 56, borderRadius: 4, backgroundColor: '#eee' },
+    thumbnail: { width: 56, height: 56, borderRadius: 4, backgroundColor: colors.border },
     infoContainer: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-    fileName: { fontSize: 14, fontWeight: '500', color: '#333', marginBottom: 6 },
-    statusText: { fontSize: 12, color: '#666', marginBottom: 4 },
+    fileName: { fontSize: 14, fontWeight: '500', color: colors.onSurface, marginBottom: 6 },
+    statusText: { fontSize: 12, color: colors.onSurfaceVariant, marginBottom: 4 },
     processingRow: { flexDirection: 'row', alignItems: 'center' },
     processingSpinner: { marginLeft: 8 },
     progressContainer: {
@@ -178,13 +181,13 @@ const styles = StyleSheet.create({
         gap: 12,
         padding: 16,
         borderTopWidth: 1,
-        borderTopColor: '#eee',
+        borderTopColor: colors.border,
     },
     footerBtn: { flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
     retryAllBtn: { backgroundColor: '#e8f0fe' },
     retryAllText: { color: '#1a73e8', fontSize: 15, fontWeight: '600' },
     clearBtn: { backgroundColor: '#f1f3f4' },
-    clearBtnText: { color: '#333', fontSize: 15, fontWeight: '600' },
+    clearBtnText: { color: colors.onSurface, fontSize: 15, fontWeight: '600' },
     retryBtn: {
         flexDirection: 'row',
         alignItems: 'center',

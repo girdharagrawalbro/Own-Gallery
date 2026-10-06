@@ -11,7 +11,8 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radii, elevation, ripple, rippleDestructive } from './theme';
+import { radii, elevation, ripple, rippleDestructive } from './theme';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 
 // ── Haptics ──────────────────────────────────────────────────────────────
 // Kept dependency-free: a very short vibration reads as a "tick" on Android
@@ -40,6 +41,8 @@ interface BottomSheetMenuProps {
 }
 
 export const BottomSheetMenu = ({ visible, onClose, title, items }: BottomSheetMenuProps) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
     const translateY = useRef(new Animated.Value(300)).current;
     const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -101,6 +104,8 @@ interface SnackbarProps {
 }
 
 export const Snackbar = ({ snackbar, onDismiss, bottomOffset = 24, durationMs = 4000 }: SnackbarProps) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const translateY = useRef(new Animated.Value(80)).current;
     const opacity = useRef(new Animated.Value(0)).current;
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,6 +153,8 @@ export const Snackbar = ({ snackbar, onDismiss, bottomOffset = 24, durationMs = 
 
 // ── Skeleton grid (loading placeholder) ─────────────────────────────────
 const SkeletonPulse = ({ style }: { style: any }) => {
+    const { colors } = useTheme();
+    const skeletonColor = colors.surfaceVariant;
     const anim = useRef(new Animated.Value(0.4)).current;
     useEffect(() => {
         const loop = Animated.loop(
@@ -159,7 +166,7 @@ const SkeletonPulse = ({ style }: { style: any }) => {
         loop.start();
         return () => loop.stop();
     }, []);
-    return <Animated.View style={[style, { backgroundColor: colors.skeleton, opacity: anim }]} />;
+    return <Animated.View style={[style, { backgroundColor: skeletonColor, opacity: anim }]} />;
 };
 
 export const SkeletonGrid = ({ cellSize, columns = 2, rows = 3, style }: { cellSize: number; columns?: number; rows?: number; style?: any }) => (
@@ -174,14 +181,14 @@ export const SkeletonGrid = ({ cellSize, columns = 2, rows = 3, style }: { cellS
     </View>
 );
 
-const styles = StyleSheet.create({
-    backdrop: { backgroundColor: colors.scrim },
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
+    backdrop: { backgroundColor: 'rgba(0,0,0,0.5)' },
     sheet: {
         position: 'absolute', left: 0, right: 0, bottom: 0,
         backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl,
         paddingTop: 10, ...elevation[4],
     },
-    grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.outline, alignSelf: 'center', marginBottom: 8 },
+    grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 8 },
     sheetTitle: { fontSize: 13, fontWeight: '600', color: colors.onSurfaceVariant, paddingHorizontal: 20, paddingVertical: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
     sheetItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
     sheetItemIcon: { width: 28, marginRight: 16, alignItems: 'center' },
@@ -190,10 +197,10 @@ const styles = StyleSheet.create({
     snackbarWrap: { position: 'absolute', left: 16, right: 16, alignItems: 'center' },
     snackbar: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        backgroundColor: colors.inverseSurface, borderRadius: radii.sm, paddingVertical: 14, paddingHorizontal: 16,
+        backgroundColor: colors.onSurface, borderRadius: radii.sm, paddingVertical: 14, paddingHorizontal: 16,
         minWidth: '100%', ...elevation[3],
     },
-    snackbarText: { color: colors.inverseOnSurface, fontSize: 14, flex: 1, marginRight: 12 },
+    snackbarText: { color: colors.surface, fontSize: 14, flex: 1, marginRight: 12 },
     snackbarActionBtn: { paddingVertical: 4, paddingHorizontal: 4 },
     snackbarActionText: { color: '#8ab4f8', fontSize: 14, fontWeight: '700', textTransform: 'uppercase' },
 });

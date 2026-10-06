@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Lock } from 'lucide-react-native';
 import { getPrivatePinStatus, setPrivatePin, unlockPrivateGallery } from '../../api/auth';
 
 const PrivatePinScreen = () => {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<any>();
     const [isSet, setIsSet] = useState<boolean | null>(null);
     const [pin, setPin] = useState('');
@@ -67,7 +70,7 @@ const PrivatePinScreen = () => {
             <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                        <ArrowLeft size={24} color="#3c4043" />
+                        <ArrowLeft size={24} color={colors.onSurface} />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Locked Folder</Text>
                 </View>
@@ -125,8 +128,8 @@ const PrivatePinScreen = () => {
 
 export default PrivatePinScreen;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.surface },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     header: { flexDirection: 'row', alignItems: 'center', padding: 16 },
     backBtn: { marginRight: 16 },
@@ -134,9 +137,9 @@ const styles = StyleSheet.create({
     content: { flex: 1, padding: 32, alignItems: 'center', paddingTop: 64 },
     iconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#e8f0fe', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
     title: { fontSize: 24, fontWeight: '600', color: '#1c1b1f', marginBottom: 12, textAlign: 'center' },
-    subtitle: { fontSize: 16, color: '#5f6368', textAlign: 'center', marginBottom: 32, lineHeight: 24 },
+    subtitle: { fontSize: 16, color: colors.onSurfaceVariant, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
     input: { width: '100%', height: 56, backgroundColor: '#f1f3f4', borderRadius: 8, paddingHorizontal: 16, fontSize: 18, marginBottom: 16, textAlign: 'center', letterSpacing: 4 },
-    btn: { width: '100%', height: 50, backgroundColor: '#1a73e8', borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
+    btn: { width: '100%', height: 50, backgroundColor: colors.primary, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginTop: 16 },
     btnDisabled: { backgroundColor: '#a8c7fa' },
-    btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    btnText: { color: colors.surface, fontSize: 16, fontWeight: '600' },
 });

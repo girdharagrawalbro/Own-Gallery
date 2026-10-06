@@ -13,6 +13,7 @@ import {
     TouchableOpacity,
     View,
     StatusBar,
+    ScrollView,
 } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack';
@@ -21,6 +22,7 @@ import { launchImageLibrary, Asset } from 'react-native-image-picker';
 import {
     CloudOff,
     Cloud,
+    CloudUpload,
     Download,
     FolderPlus,
     Heart,
@@ -68,7 +70,7 @@ const GalleryScreen = () => {
     const styles = React.useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<StackNavigationProp<any>>();
     const { logout, user } = useAuth();
-    const { completedVersion } = useUploadActions();
+    const { completedVersion, enqueueUploads } = useUploadActions();
     const insets = useSafeAreaInsets();
     const gridRef = useRef<MediaGridHandle>(null);
 
@@ -95,8 +97,8 @@ const GalleryScreen = () => {
     const combinedMedia = React.useMemo(() => {
         if (ordering !== 'date') return media; // Only mix local in date sorting
         
-        const byFilenameSize = new Map<string, Media>();
-        media.forEach(m => byFilenameSize.set(`${m.filename}_${m.file_size}`, m));
+        const byFilename = new Map<string, Media>();
+        media.forEach(m => byFilename.set(m.filename, m));
         
         const merged = [...media];
         for (const local of localMedia) {
@@ -104,10 +106,10 @@ const GalleryScreen = () => {
             if (activePill === 'screenshots' && !local.filename.toLowerCase().includes('screenshot')) continue;
 
             // Very simple deduplication:
-            const key = `${local.filename}_${local.file_size}`;
-            if (byFilenameSize.has(key)) {
+            const key = local.filename;
+            if (byFilename.has(key)) {
                 // Already backed up, maybe mark the cloud item as also local?
-                const cloudItem = byFilenameSize.get(key)!;
+                const cloudItem = byFilename.get(key)!;
                 cloudItem._backupStatus = 'backed_up';
             } else {
                 // Not backed up
@@ -345,6 +347,27 @@ const GalleryScreen = () => {
 
     // ── Bulk actions ────────────────────────────────────────────────────────
 
+    const handleBulkBackup = () => {
+        const ids = Array.from(selectedIds);
+        const itemsToBackup = combinedMedia.filter(m => ids.includes(m.id) && m._backupStatus === 'not_backed_up');
+        if (itemsToBackup.length === 0) {
+            ToastAndroid.show('Selected items are already backed up.', ToastAndroid.SHORT);
+            return;
+        }
+
+        const assets: Asset[] = itemsToBackup.map(item => ({
+            uri: item.preview_url,
+            fileName: item.filename,
+            type: item.mime_type,
+            fileSize: item.file_size,
+            timestamp: new Date(item.taken_at).getTime() / 1000,
+        }));
+
+        enqueueUploads(assets);
+        ToastAndroid.show(`Backing up ${assets.length} items...`, ToastAndroid.SHORT);
+        clearSelection();
+    };
+
     const handleBulkTrash = () => {
         const ids = Array.from(selectedIds);
         Alert.alert('Move to Trash', `Move ${ids.length} items to trash?`, [
@@ -569,7 +592,11 @@ const GalleryScreen = () => {
                         </TouchableOpacity>
                         <Text style={[styles.selectionCount, { color: colors.onSurface }]}>{selectedIds.size} selected</Text>
                     </View>
-                    <View style={styles.bottomBarActions}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bottomBarActions}>
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleBulkBackup}>
+                            <CloudUpload size={24} color={colors.onSurface} />
+                            <Text style={[styles.actionText, { color: colors.onSurface }]}>Backup</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setSelectAlbumVisible(true)}>
                             <FolderPlus size={24} color={colors.onSurface} />
                             <Text style={[styles.actionText, { color: colors.onSurface }]}>Add</Text>
@@ -594,7 +621,7 @@ const GalleryScreen = () => {
                             <Trash2 size={24} color={colors.onSurface} />
                             <Text style={[styles.actionText, { color: colors.onSurface }]}>Delete</Text>
                         </TouchableOpacity>
-                    </View>
+                    </ScrollView>
                 </View>
             </Animated.View>
 
@@ -810,7 +837,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     selectionCount: { fontSize: 18, fontWeight: '500', color: colors.text },
     bottomBarActions: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start', gap: 24,
         paddingHorizontal: 10,
         paddingBottom: 8,
     },

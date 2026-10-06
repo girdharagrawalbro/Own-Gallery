@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import {
     ActivityIndicator,
     Alert,
@@ -155,10 +156,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
 
 export default LoginScreen;
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
     },
 
     content: {
@@ -192,19 +193,19 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         paddingHorizontal: 16,
         marginBottom: 16,
-        color: '#000',
+        color: colors.onSurface,
     },
 
     button: {
         height: 50,
         borderRadius: 8,
-        backgroundColor: '#000',
+        backgroundColor: colors.onSurface,
         justifyContent: 'center',
         alignItems: 'center',
     },
 
     buttonText: {
-        color: '#fff',
+        color: colors.surface,
         fontSize: 16,
         fontWeight: '600',
     },
@@ -233,7 +234,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     googleButton: {
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: '#ccc',
     },

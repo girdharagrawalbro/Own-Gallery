@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import { updateProfile, changePassword } from '../../api/auth';
 import { getStats, type MediaStats } from '../../api/media';
 import { formatBytes } from '../../utils/format';
@@ -89,6 +89,7 @@ const SettingsScreen = () => {
   const [isClearingCache, setIsClearingCache] = useState(false);
   
   const { mode: theme, setMode: setTheme, colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
 
   const [stats, setStats] = useState<MediaStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -315,7 +316,7 @@ const SettingsScreen = () => {
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={styles.rowLeft}>
-                <User size={20} color="#007AFF" style={styles.rowIcon} />
+                <User size={20} color={colors.primary} style={styles.rowIcon} />
                 <View>
                   <Text style={styles.rowText}>
                     {user?.first_name || user?.last_name
@@ -331,7 +332,7 @@ const SettingsScreen = () => {
                 setEmail(user?.email || '');
                 setEditProfileVisible(true);
               }} style={styles.editBtn}>
-                <Edit3 size={18} color="#007AFF" />
+                <Edit3 size={18} color={colors.primary} />
               </TouchableOpacity>
             </View>
 
@@ -347,7 +348,7 @@ const SettingsScreen = () => {
                 <Lock size={20} color="#34C759" style={styles.rowIcon} />
                 <Text style={styles.rowText}>Change Password</Text>
               </View>
-              <ChevronRight size={20} color="#c7c7cc" />
+              <ChevronRight size={20} color={colors.onSurfaceVariant} />
             </TouchableOpacity>
           </View>
         </View>
@@ -378,9 +379,9 @@ const SettingsScreen = () => {
               </View>
               <TouchableOpacity onPress={clearCache} disabled={isClearingCache}>
                 {isClearingCache ? (
-                  <ActivityIndicator size="small" color="#007AFF" />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <Text style={{ color: '#FF3B30' }}>Clear Cache</Text>
+                  <Text style={{ color: colors.error }}>Clear Cache</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -455,11 +456,11 @@ const SettingsScreen = () => {
                     : 'All folders (Camera, Screenshots, WhatsApp, Downloads…)'}
                 </Text>
               </View>
-              <ChevronRight size={20} color="#c7c7cc" />
+              <ChevronRight size={20} color={colors.onSurfaceVariant} />
             </TouchableOpacity>
             {backupStatus?.enabled && (
               <TouchableOpacity style={[styles.row, styles.noBorder]} onPress={backUpNow}>
-                <Text style={[styles.rowText, { color: '#1a73e8' }]}>Back up now</Text>
+                <Text style={[styles.rowText, { color: colors.primary }]}>Back up now</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -469,13 +470,13 @@ const SettingsScreen = () => {
           <View style={styles.card}>
             <TouchableOpacity style={[styles.row, styles.noBorder]} onPress={() => navigation.navigate('PrivatePin')}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Lock size={20} color="#3c4043" style={{ marginRight: 12 }} />
+                <Lock size={20} color={colors.onSurface} style={{ marginRight: 12 }} />
                 <View>
                   <Text style={styles.rowText}>Locked Folder</Text>
                   <Text style={styles.subText}>Keep sensitive photos hidden and protected</Text>
                 </View>
               </View>
-              <ChevronRight size={20} color="#c7c7cc" />
+              <ChevronRight size={20} color={colors.onSurfaceVariant} />
             </TouchableOpacity>
           </View>
         </View>
@@ -492,8 +493,8 @@ const SettingsScreen = () => {
                     : `${formatBytes(stats?.total_size || 0)} · ${stats?.total_items || 0} items`}
                 </Text>
                 {!loadingStats && (stats?.total_size ?? 0) > 0 && (
-                  <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', marginTop: 8, backgroundColor: '#e5e5ea' }}>
-                    <View style={{ flex: stats!.photo_size, backgroundColor: '#007AFF' }} />
+                  <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', marginTop: 8, backgroundColor: colors.surfaceVariant }}>
+                    <View style={{ flex: stats!.photo_size, backgroundColor: colors.primary }} />
                     <View style={{ flex: stats!.video_size, backgroundColor: '#FF9500' }} />
                   </View>
                 )}
@@ -536,13 +537,13 @@ const SettingsScreen = () => {
             </View>
             <TouchableOpacity style={[styles.row, styles.noBorder]} onPress={() => Alert.alert('About', 'Own-Gallery v1.0\n\nDeveloped by Girdhar Agrawal.')}>
               <Text style={styles.rowText}>About</Text>
-              <ChevronRight size={20} color="#c7c7cc" />
+              <ChevronRight size={20} color={colors.onSurfaceVariant} />
             </TouchableOpacity>
           </View>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <LogOut size={20} color="#FF3B30" />
+          <LogOut size={20} color={colors.error} />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
@@ -577,7 +578,7 @@ const SettingsScreen = () => {
                 <Text style={styles.modalBtnText}>Cancel</Text>
               </Pressable>
               <Pressable style={styles.modalBtn} onPress={saveFolders}>
-                <Text style={[styles.modalBtnText, { color: '#007AFF', fontWeight: 'bold' }]}>Save</Text>
+                <Text style={[styles.modalBtnText, { color: colors.primary, fontWeight: 'bold' }]}>Save</Text>
               </Pressable>
             </View>
           </View>
@@ -621,7 +622,7 @@ const SettingsScreen = () => {
                 <Text style={styles.modalBtnText}>Cancel</Text>
               </Pressable>
               <Pressable style={styles.modalBtn} onPress={handleUpdateProfile} disabled={isUpdating}>
-                {isUpdating ? <ActivityIndicator size="small" color="#007AFF" /> : <Text style={[styles.modalBtnText, { color: '#007AFF', fontWeight: 'bold' }]}>Save</Text>}
+                {isUpdating ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={[styles.modalBtnText, { color: colors.primary, fontWeight: 'bold' }]}>Save</Text>}
               </Pressable>
             </View>
           </View>
@@ -657,7 +658,7 @@ const SettingsScreen = () => {
                 <Text style={styles.modalBtnText}>Cancel</Text>
               </Pressable>
               <Pressable style={styles.modalBtn} onPress={handleUpdatePassword} disabled={isUpdating}>
-                {isUpdating ? <ActivityIndicator size="small" color="#007AFF" /> : <Text style={[styles.modalBtnText, { color: '#007AFF', fontWeight: 'bold' }]}>Update</Text>}
+                {isUpdating ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={[styles.modalBtnText, { color: colors.primary, fontWeight: 'bold' }]}>Update</Text>}
               </Pressable>
             </View>
           </View>
@@ -670,17 +671,17 @@ const SettingsScreen = () => {
 
 export default SettingsScreen;
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   rowTextBlock: { flex: 1, marginRight: 12 },
-  container: { flex: 1, backgroundColor: '#f2f2f7' },
+  container: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingHorizontal: 16, paddingTop:   50 },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 24, color: '#000' },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 24, color: colors.onBackground },
 
   section: { marginBottom: 24 },
-  sectionHeader: { fontSize: 13, color: '#8e8e93', marginBottom: 8, paddingLeft: 16, fontWeight: '600' },
+  sectionHeader: { fontSize: 13, color: colors.onSurfaceVariant, marginBottom: 8, paddingLeft: 16, fontWeight: '600' },
 
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -692,7 +693,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#c6c6c8',
+    borderBottomColor: colors.border,
   },
   rowLeft: {
     flexDirection: 'row',
@@ -706,16 +707,16 @@ const styles = StyleSheet.create({
   },
   rowText: {
     fontSize: 17,
-    color: '#000',
+    color: colors.onBackground,
   },
   subText: {
     fontSize: 14,
-    color: '#8e8e93',
+    color: colors.onSurfaceVariant,
     marginTop: 2,
   },
   rowValue: {
     fontSize: 17,
-    color: '#8e8e93',
+    color: colors.onSurfaceVariant,
   },
   editBtn: {
     padding: 8,
@@ -723,7 +724,7 @@ const styles = StyleSheet.create({
 
   logoutButton: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -733,17 +734,17 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     fontSize: 17,
-    color: '#ff3b30',
+    color: colors.error,
     fontWeight: '600'
   },
 
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { width: '85%', backgroundColor: '#fff', borderRadius: 12, padding: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#111' },
-  label: { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 16, color: '#000' },
-  modalActions: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 16, marginTop: 8 },
+  modalContent: { width: '85%', backgroundColor: colors.surface, borderRadius: 12, padding: 20 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: colors.onSurface },
+  label: { fontSize: 14, fontWeight: '600', color: colors.onSurfaceVariant, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 16, color: colors.onBackground },
+  modalActions: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16, marginTop: 8 },
   modalBtn: { flex: 1, alignItems: 'center', paddingVertical: 8 },
-  modalBtnText: { fontSize: 16, color: '#555' },
+  modalBtnText: { fontSize: 16, color: colors.onSurfaceVariant },
 });

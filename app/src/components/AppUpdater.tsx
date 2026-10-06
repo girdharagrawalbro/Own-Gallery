@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTheme, ThemeColors } from '../context/ThemeContext';
 import {
   Alert,
   Modal,
@@ -25,6 +26,8 @@ interface UpdateInfo {
 }
 
 export const AppUpdater = () => {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const VERSION_URL = `${API_BASE_URL.replace('/api', '')}/version.json`;
   
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -112,7 +115,7 @@ export const AppUpdater = () => {
 
           {isDownloading ? (
             <View style={styles.progressContainer}>
-              <ActivityIndicator size="large" color="#1a73e8" />
+              <ActivityIndicator size="large" color={colors.primary} />
               <Text style={styles.progressText}>Downloading... {downloadProgress}%</Text>
             </View>
           ) : (
@@ -133,7 +136,7 @@ export const AppUpdater = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -142,25 +145,25 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   dialog: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 24,
     width: '100%',
     maxWidth: 400,
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: colors.onSurface,
     shadowOpacity: 0.1,
     shadowRadius: 10,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#202124',
+    color: colors.onSurface,
     marginBottom: 12,
   },
   message: {
     fontSize: 16,
-    color: '#5f6368',
+    color: colors.onSurfaceVariant,
     marginBottom: 24,
     lineHeight: 22,
   },
@@ -171,7 +174,7 @@ const styles = StyleSheet.create({
   progressText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#1a73e8',
+    color: colors.primary,
     fontWeight: '500',
   },
   actions: {
@@ -185,18 +188,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   skipText: {
-    color: '#5f6368',
+    color: colors.onSurfaceVariant,
     fontSize: 16,
     fontWeight: '500',
   },
   updateButton: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
   },
   updateText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 16,
     fontWeight: 'bold',
   },

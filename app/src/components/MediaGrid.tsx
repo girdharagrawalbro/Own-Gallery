@@ -23,10 +23,11 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { AlertCircle, Check, Heart, Play } from 'lucide-react-native';
-import { useTheme } from '../context/ThemeContext';
+
 
 import RemoteImage from './RemoteImage';
 import SkeletonGrid, { GRID_GAP } from './SkeletonGrid';
+import { useTheme, ThemeColors } from '../context/ThemeContext';
 import { Media } from '../types/media';
 import { dayKey, formatDayTitle, formatDuration, mediaDate } from '../utils/format';
 
@@ -156,6 +157,7 @@ const GridCell = React.memo(({
   onLongPress,
 }: CellProps) => {
   const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const scale = useRef(new RNAnimated.Value(selected ? 0.86 : 1)).current;
   const prevSelected = useRef(selected);
 
@@ -200,25 +202,25 @@ const GridCell = React.memo(({
             {!compact && item.duration != null && (
               <Text style={styles.videoBadgeText}>{formatDuration(item.duration)}</Text>
             )}
-            <Play size={compact ? 10 : 12} color="#fff" fill="#fff" />
+            <Play size={compact ? 10 : 12} color={colors.surface} fill="#fff" />
           </View>
         )}
 
         {showFavoriteBadge && item.is_favorite && !selectionMode && (
           <View style={styles.favoriteBadge}>
-            <Heart size={compact ? 12 : 15} color="#fff" fill="#fff" />
+            <Heart size={compact ? 12 : 15} color={colors.surface} fill="#fff" />
           </View>
         )}
 
         {isProcessing && (
           <View style={styles.processingOverlay}>
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={colors.surface} />
           </View>
         )}
 
         {isFailed && (
           <View style={styles.failedBadge}>
-            <AlertCircle size={compact ? 14 : 18} color="#fff" fill="#d93025" />
+            <AlertCircle size={compact ? 14 : 18} color={colors.surface} fill="#d93025" />
           </View>
         )}
 
@@ -231,7 +233,7 @@ const GridCell = React.memo(({
         <View style={styles.selectionOverlay} pointerEvents="none">
           {selected || disabled ? (
             <View style={[styles.checkBadge, disabled && styles.checkBadgeDisabled]}>
-              <Check size={13} color="#fff" strokeWidth={3} />
+              <Check size={13} color={colors.surface} strokeWidth={3} />
             </View>
           ) : (
             <View style={styles.uncheckedBadge} />
@@ -269,7 +271,10 @@ const GridRow = React.memo(({
   renderCellOverlay,
   onPress,
   onLongPress,
-}: RowProps) => (
+}: RowProps) => {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
+  return (
   <View style={[styles.row, { height: height + GRID_GAP }]}>
     {items.map((item, i) => (
       <GridCell
@@ -288,7 +293,8 @@ const GridRow = React.memo(({
       />
     ))}
   </View>
-));
+);
+});
 
 interface HeaderProps {
   title: string;
@@ -300,13 +306,14 @@ interface HeaderProps {
 
 const GridHeader = React.memo(({ title, ids, allSelected, showCheckbox, onToggle }: HeaderProps) => {
   const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   return (
   <View style={[styles.header, { backgroundColor: colors.background }]}>
     <Text style={[styles.headerText, { color: colors.onBackground }]} numberOfLines={1}>{title}</Text>
     {showCheckbox && (
       <Pressable onPress={() => onToggle(ids)} hitSlop={12} style={styles.headerCheckBtn}>
         <View style={[styles.headerCheck, { borderColor: isDark ? '#666' : '#9aa0a6' }, allSelected && styles.headerCheckActive]}>
-          {allSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+          {allSelected && <Check size={14} color={colors.surface} strokeWidth={3} />}
         </View>
       </Pressable>
     )}
@@ -372,6 +379,8 @@ const MediaGrid = ({
   onScroll,
   ref,
 }: MediaGridProps) => {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
   const { width, height } = useWindowDimensions();
   const [columns, setColumns] = useGridColumns();
   const listRef = useRef<FlatList<ListItem>>(null);
@@ -622,7 +631,7 @@ const MediaGrid = ({
           onEndReached={onEndReached}
           onEndReachedThreshold={1.5}
           ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={styles.footerSpinner} color="#1a73e8" /> : undefined
+            loadingMore ? <ActivityIndicator style={styles.footerSpinner} color={colors.primary} /> : undefined
           }
           ListEmptyComponent={emptyState}
           ListHeaderComponent={ListHeaderComponent}
@@ -636,7 +645,7 @@ const MediaGrid = ({
 
 export default MediaGrid;
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   flex: { flex: 1 },
   header: {
     height: HEADER_HEIGHT,
@@ -644,9 +653,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
   },
-  headerText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#3c4043' },
+  headerText: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.onSurface },
   headerCheckBtn: { padding: 4 },
   headerCheck: {
     width: 22,
@@ -657,10 +666,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerCheckActive: { backgroundColor: '#1a73e8', borderColor: '#1a73e8' },
+  headerCheckActive: { backgroundColor: colors.primary, borderColor: colors.primary },
 
   row: { flexDirection: 'row', paddingBottom: GRID_GAP },
-  cell: { overflow: 'hidden', backgroundColor: '#fff' },
+  cell: { overflow: 'hidden', backgroundColor: colors.surface },
   cellGap: { marginLeft: GRID_GAP },
   cellInner: { flex: 1, overflow: 'hidden', backgroundColor: '#f1f3f4' },
   cellInnerSelected: { borderRadius: 10 },
@@ -678,7 +687,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   videoBadgeText: {
-    color: '#fff',
+    color: colors.surface,
     fontSize: 11,
     fontWeight: '600',
     textShadowColor: 'rgba(0,0,0,0.5)',
@@ -699,11 +708,11 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#1a73e8',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#fff',
+    borderColor: colors.surface,
   },
   checkBadgeDisabled: { backgroundColor: '#80868b' },
   uncheckedBadge: {
@@ -711,7 +720,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: '#fff',
+    borderColor: colors.surface,
     backgroundColor: 'rgba(0,0,0,0.15)',
   },
   footerSpinner: { paddingVertical: 24 },

@@ -7,9 +7,12 @@ import { Lock, ArrowLeft, Unlock } from 'lucide-react-native';
 import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from '../Gallery/MediaViewer';
 import { getMedia, bulkUnprivate } from '../../api/media';
+import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import { Media } from '../../types/media';
 
 const PrivateGalleryScreen = () => {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => getStyles(colors), [colors]);
     const route = useRoute<any>();
     const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();
@@ -147,19 +150,19 @@ const PrivateGalleryScreen = () => {
             {selectionMode ? (
                 <View style={[styles.selectionHeader, { paddingTop: Math.max(insets.top, 16) }]}>
                     <TouchableOpacity onPress={clearSelection} style={styles.backBtn}>
-                        <ArrowLeft size={24} color="#3c4043" />
+                        <ArrowLeft size={24} color={colors.onSurface} />
                     </TouchableOpacity>
                     <Text style={styles.selectionCount}>{selectedIds.size}</Text>
                     <View style={{ flex: 1 }} />
                     <TouchableOpacity onPress={handleUnprivate} style={styles.unprivateBtn}>
-                        <Unlock size={20} color="#1a73e8" />
+                        <Unlock size={20} color={colors.primary} />
                         <Text style={styles.unprivateText}>Move out</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
                 <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                        <ArrowLeft size={24} color="#3c4043" />
+                        <ArrowLeft size={24} color={colors.onSurface} />
                     </TouchableOpacity>
                     <Text style={styles.heading}>Locked Folder</Text>
                 </View>
@@ -203,17 +206,17 @@ const PrivateGalleryScreen = () => {
 
 export default PrivateGalleryScreen;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, backgroundColor: '#fff' },
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.surface },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, backgroundColor: colors.surface },
     backBtn: { marginRight: 16, padding: 4 },
     heading: { fontSize: 24, fontWeight: '500', color: '#1c1b1f' },
     selectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, backgroundColor: '#e8f0fe' },
-    selectionCount: { fontSize: 22, fontWeight: '500', color: '#1a73e8' },
-    unprivateBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderRadius: 20 },
-    unprivateText: { color: '#1a73e8', marginLeft: 8, fontWeight: '500' },
+    selectionCount: { fontSize: 22, fontWeight: '500', color: colors.primary },
+    unprivateBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.surface, borderRadius: 20 },
+    unprivateText: { color: colors.primary, marginLeft: 8, fontWeight: '500' },
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
     emptyIcon: { marginBottom: 16 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.onSurface, marginBottom: 8 },
     emptySubtitle: { fontSize: 16, color: '#777', textAlign: 'center' },
 });
