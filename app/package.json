@@ -67,7 +67,7 @@
     "type": "modules",
     "jsSrcsDir": "src/native",
     "android": {
-      "javaPackageName": "com.app.backup"
+      "javaPackageName": "com.owngallery.app.backup"
     }
   }
 }

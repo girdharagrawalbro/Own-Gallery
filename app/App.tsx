@@ -12,6 +12,8 @@ import ShareReceiver from './src/components/ShareReceiver';
 import { API_BASE_URL } from './src/api/client';
 import { getAccessToken, getRefreshToken } from './src/storage/authStorage';
 import { configureAutoBackup, syncAutoBackupAuth } from './src/services/AutoBackupService';
+import { ThemeProvider } from './src/context/ThemeContext';
+import { AppUpdater } from './src/components/AppUpdater';
 
 // Give the native Auto Backup worker the API address and the current session
 // (covers users who were already signed in before Auto Backup existed).
@@ -37,6 +39,7 @@ const AppContent = () => {
 
   return (
     <UploadProvider>
+      <AppUpdater />
       <UploadBanner />
       <AppNavigator />
       <ShareReceiver />
@@ -58,9 +61,11 @@ const App = () => {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

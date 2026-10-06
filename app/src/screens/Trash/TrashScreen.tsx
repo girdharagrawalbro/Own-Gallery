@@ -15,8 +15,11 @@ import { Trash2 } from 'lucide-react-native';
 import MediaGrid from '../../components/MediaGrid';
 import { getTrashMedia, restoreFromTrash, permanentDelete, emptyTrash } from '../../api/media';
 import { Media } from '../../types/media';
+import { useTheme } from '../../context/ThemeContext';
 
 const TrashScreen = () => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
 
     const [media, setMedia] = useState<Media[]>([]);
@@ -145,7 +148,7 @@ const TrashScreen = () => {
                 bottomPadding={insets.bottom + 100}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Trash2 size={64} color="#ccc" style={styles.emptyIcon} />
+                        <Trash2 size={64} color={colors.onSurfaceVariant} style={styles.emptyIcon} />
                         <Text style={styles.emptyTitle}>Trash is empty</Text>
                     </View>
                 }
@@ -162,8 +165,8 @@ const TrashScreen = () => {
 
 export default TrashScreen;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
 
     header: {
         flexDirection: 'row',
@@ -171,23 +174,23 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingBottom: 16,
-        backgroundColor: '#fff',
+        backgroundColor: colors.background,
     },
-    heading: { fontSize: 28, fontWeight: '700', color: '#3c4043', letterSpacing: -0.5 },
-    subheading: { fontSize: 13, color: '#5f6368', marginTop: 2 },
-    emptyBtnText: { color: '#1a73e8', fontSize: 16, fontWeight: '600' },
-    emptyBtnDisabled: { color: '#8ab4f8' },
+    heading: { fontSize: 28, fontWeight: '700', color: colors.text, letterSpacing: -0.5 },
+    subheading: { fontSize: 13, color: colors.onSurfaceVariant, marginTop: 2 },
+    emptyBtnText: { color: colors.primary, fontSize: 16, fontWeight: '600' },
+    emptyBtnDisabled: { color: colors.primary + '80' },
 
     trashOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 3 },
     trashOverlayText: { color: '#fff', fontSize: 10, textAlign: 'center' },
 
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
     emptyIcon: { marginBottom: 16 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 8 },
 
     busyOverlay: {
         ...StyleSheet.absoluteFill,
-        backgroundColor: 'rgba(255,255,255,0.6)',
+        backgroundColor: colors.background + 'b3',
         justifyContent: 'center',
         alignItems: 'center',
     },

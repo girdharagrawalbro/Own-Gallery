@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useTheme } from '../context/ThemeContext';
 
 import GalleryScreen from '../screens/Gallery/GalleryScreen';
 import AlbumsScreen from '../screens/Albums/AlbumsScreen';
@@ -21,12 +22,14 @@ import { Image as ImageIcon, Folder, Heart, Trash2, Users } from 'lucide-react-n
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator();
 
-const MainTabs = () => (
+const MainTabs = () => {
+  const { colors } = useTheme();
+  return (
   <Tab.Navigator
     screenOptions={({ route }) => ({
       headerShown: false,
       tabBarStyle: {
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
         borderTopWidth: 0,
         elevation: 8,
         shadowColor: '#000',
@@ -37,8 +40,8 @@ const MainTabs = () => (
         paddingBottom: 8,
         paddingTop: 8,
       },
-      tabBarActiveTintColor: '#1a73e8',
-      tabBarInactiveTintColor: '#5f6368',
+      tabBarActiveTintColor: colors.primary,
+      tabBarInactiveTintColor: colors.onSurfaceVariant,
       tabBarLabelStyle: {
         fontSize: 12,
         fontWeight: '500',
@@ -60,23 +63,31 @@ const MainTabs = () => (
     <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ tabBarLabel: 'Favorites' }} />
     <Tab.Screen name="Trash" component={TrashScreen} options={{ tabBarLabel: 'Trash' }} />
   </Tab.Navigator>
-);
+  );
+};
+
+import PrivateGalleryScreen from '../screens/PrivateGallery/PrivateGalleryScreen';
+import PrivatePinScreen from '../screens/PrivateGallery/PrivatePinScreen';
 
 const slide = { cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS };
 
-const AppNavigator = () => (
+const AppNavigator = () => {
+  const { colors } = useTheme();
+  return (
   <SafeAreaProvider>
     <NavigationContainer>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Navigator screenOptions={{ headerShown: false, cardStyle: { backgroundColor: colors.background } }}>
         <RootStack.Screen name="MainTabs" component={MainTabs} />
         <RootStack.Screen name="AlbumDetail" component={AlbumDetailScreen} options={slide} />
         <RootStack.Screen name="CreateAlbum" component={CreateAlbumScreen} options={slide} />
         <RootStack.Screen name="PersonDetail" component={PersonDetailScreen} options={slide} />
         <RootStack.Screen name="Settings" component={SettingsScreen} options={slide} />
-
+        <RootStack.Screen name="PrivateGallery" component={PrivateGalleryScreen} options={slide} />
+        <RootStack.Screen name="PrivatePin" component={PrivatePinScreen} options={slide} />
       </RootStack.Navigator>
     </NavigationContainer>
   </SafeAreaProvider>
-);
+  );
+};
 
 export default AppNavigator;

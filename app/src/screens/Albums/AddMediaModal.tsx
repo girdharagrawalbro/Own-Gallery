@@ -15,6 +15,7 @@ import MediaGrid from '../../components/MediaGrid';
 import { getMedia } from '../../api/media';
 import { addMediaToAlbum, getAlbumMedia } from '../../api/albums';
 import { Media } from '../../types/media';
+import { useTheme } from '../../context/ThemeContext';
 
 interface Props {
     visible: boolean;
@@ -26,6 +27,9 @@ interface Props {
 const EMPTY_SET = new Set<number>();
 
 const AddMediaModal = ({ visible, albumId, onClose, onAdded }: Props) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
+
     const [media, setMedia] = useState<Media[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -162,15 +166,15 @@ const AddMediaModal = ({ visible, albumId, onClose, onAdded }: Props) => {
 
 export default AddMediaModal;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111' },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background || colors.surface },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
     closeBtn: { padding: 8 },
-    closeBtnText: { fontSize: 16, color: '#1a73e8' },
+    closeBtnText: { fontSize: 16, color: colors.primary },
     gridContainer: { flex: 1 },
-    footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#eee' },
-    addBtn: { backgroundColor: '#1a73e8', paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
-    addBtnDisabled: { backgroundColor: '#8ab4f8' },
-    addBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    footer: { padding: 16, borderTopWidth: 1, borderTopColor: colors.border },
+    addBtn: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
+    addBtnDisabled: { backgroundColor: colors.surfaceVariant, opacity: 0.5 },
+    addBtnText: { color: colors.surface, fontSize: 16, fontWeight: '600' },
 });

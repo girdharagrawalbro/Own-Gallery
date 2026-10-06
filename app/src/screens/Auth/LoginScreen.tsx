@@ -69,8 +69,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
             });
 
             await GoogleSignin.hasPlayServices();
-            const userInfo = await GoogleSignin.signIn();
-            const serverAuthCode = userInfo.serverAuthCode;
+            const signInResult = await GoogleSignin.signIn();
+            if (signInResult.type !== 'success') {
+                throw new Error(`Google Sign-In was ${signInResult.type}`);
+            }
+            const serverAuthCode = signInResult.data.serverAuthCode;
 
             if (!serverAuthCode) {
                 throw new Error("No server auth code returned from Google.");
@@ -81,8 +84,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSwitchToRegister }) => {
             setAuthenticated(true);
             ToastAndroid.show('Google Login successful', ToastAndroid.SHORT);
         } catch (error: any) {
-            console.error('GOOGLE LOGIN ERROR:', error);
-            Alert.alert('Google Login Failed', error.message || 'Something went wrong.');
+            console.error('GOOGLE LOGIN ERROR:', error?.response?.data || error);
+            Alert.alert(
+                'Google Login Failed', 
+                error?.response?.data?.detail || error?.message || 'Something went wrong.'
+            );
         } finally {
             setLoading(false);
         }

@@ -164,7 +164,7 @@ const Layout = () => {
               {label}
             </NavLink>
           ))}
-          <a href="https://drive.google.com/file/d/1UxYB5U0WOu6MygbLriP5lUQ8wwTMKrk6/view?usp=sharing" target="_blank" rel="noopener noreferrer" className="sidebar-item" style={{ marginTop: 'auto' }} title="Download Android App">
+          <a href="https://github.com/girdharagrawalbro/Own-Gallery/releases/latest/download/app-release.apk" target="_blank" rel="noopener noreferrer" className="sidebar-item" style={{ marginTop: 'auto' }} title="Download Android App">
             <Download size={20} />
             Get Android App
           </a>
@@ -188,7 +188,7 @@ const Layout = () => {
               <Upload size={18} />
               <span>Upload</span>
             </button>
-            <a href="https://drive.google.com/file/d/1UxYB5U0WOu6MygbLriP5lUQ8wwTMKrk6/view?usp=sharing" target="_blank" rel="noopener noreferrer" className="btn-icon" title="Download Android App" aria-label="Download App" style={{ color: 'inherit' }}>
+            <a href="https://github.com/girdharagrawalbro/Own-Gallery/releases/latest/download/app-release.apk" target="_blank" rel="noopener noreferrer" className="btn-icon" title="Download Android App" aria-label="Download App" style={{ color: 'inherit' }}>
               <Smartphone size={22} />
             </a>
             <button className="btn-icon" onClick={() => setShowSettings(true)} title="Settings" aria-label="Settings">

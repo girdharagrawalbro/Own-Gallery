@@ -47,7 +47,8 @@ import { bulkUpdateTakenAt } from '../../api/media';
 import { Media } from '../../types/media';
 import { useUploadActions } from '../../context/UploadContext';
 import { formatDateRange, mediaDate, dayKey } from '../../utils/format';
-import { colors, radii, elevation, rippleOnDark } from './theme';
+import { radii, elevation, rippleOnDark } from './theme';
+import { useTheme } from '../../context/ThemeContext';
 import { BottomSheetMenu, Snackbar, SnackbarState, haptics } from './AlbumUIKit';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -55,6 +56,8 @@ const HERO_HEIGHT = 600;
 const EMPTY_SELECTION = new Set<number>();
 
 const AlbumDetailScreen = () => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<any>();
     const route = useRoute<any>();
     const insets = useSafeAreaInsets();
@@ -569,6 +572,8 @@ const AlbumBulkDateModal = ({ count, onConfirm, onCancel }: {
     onConfirm: (date: Date) => void;
     onCancel: () => void;
 }) => {
+    const { colors } = useTheme();
+    const ds = React.useMemo(() => getDateStyles(colors), [colors]);
     const pad = (n: number) => String(n).padStart(2, '0');
     const now = new Date();
     const [year, setYear] = React.useState(String(now.getFullYear()));
@@ -634,8 +639,8 @@ const AlbumBulkDateModal = ({ count, onConfirm, onCancel }: {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background || colors.surface },
 
     compactHeader: {
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
@@ -687,8 +692,8 @@ const styles = StyleSheet.create({
     floatingBarBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
 });
 
-const ds = StyleSheet.create({
-    overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.scrim },
+const getDateStyles = (colors: any) => StyleSheet.create({
+    overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
     sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl, padding: 24, paddingBottom: 40 },
     title: { fontSize: 18, fontWeight: '700', color: colors.onSurface, marginBottom: 6, textAlign: 'center' },
     subtitle: { fontSize: 13, color: colors.onSurfaceVariant, textAlign: 'center', marginBottom: 20 },

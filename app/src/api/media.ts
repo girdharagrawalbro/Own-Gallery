@@ -15,6 +15,9 @@ export interface GetMediaParams {
   mediaType?: 'image' | 'video';
   albumId?: number;
   ordering?: 'date' | 'added';
+  category?: string;
+  isPrivate?: boolean;
+  privateToken?: string;
 }
 
 export const getMedia = async ({
@@ -25,6 +28,9 @@ export const getMedia = async ({
   mediaType,
   albumId,
   ordering,
+  category,
+  isPrivate,
+  privateToken,
 }: GetMediaParams = {}): Promise<PaginatedMedia> => {
   let url = `/media/?page=${page}&page_size=${pageSize}`;
   if (isFavorite) { url += '&is_favorite=true'; }
@@ -32,8 +38,15 @@ export const getMedia = async ({
   if (mediaType) { url += `&media_type=${mediaType}`; }
   if (albumId) { url += `&album=${albumId}`; }
   if (ordering === 'added') { url += '&ordering=added'; }
+  if (category) { url += `&category=${category}`; }
+  if (isPrivate) { url += `&is_private=true`; }
 
-  const response = await api.get<PaginatedMedia>(url);
+  const headers: any = {};
+  if (privateToken) {
+      headers['X-Private-Token'] = privateToken;
+  }
+
+  const response = await api.get<PaginatedMedia>(url, { headers });
   return response.data;
 };
 

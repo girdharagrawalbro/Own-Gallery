@@ -1,4 +1,4 @@
-package com.app.backup
+package com.owngallery.app.backup
 
 import com.facebook.react.BaseReactPackage
 import com.facebook.react.bridge.NativeModule

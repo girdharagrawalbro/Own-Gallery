@@ -915,8 +915,8 @@
     "android": {
       "sourceDir": "/home/girdhar/Personal/Own-Gallery /app/android",
       "appName": "app",
-      "packageName": "com.app",
-      "applicationId": "com.app",
+      "packageName": "com.owngallery.app",
+      "applicationId": "com.owngallery.app",
       "mainActivity": ".MainActivity",
       "assets": []
     }

@@ -10,6 +10,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { ImageOff } from 'lucide-react-native';
+import { useTheme } from '../context/ThemeContext';
 
 interface Props {
   /** Signed absolute URL. Rendered directly; native image cache (Fresco / SDWebImage) does the rest. */
@@ -40,6 +41,9 @@ const RemoteImage = ({
   errorIconSize = 22,
   onLoad,
 }: Props) => {
+  const { colors } = useTheme();
+  const actualPlaceholderColor = placeholderColor === '#f1f3f4' ? colors.surfaceVariant : placeholderColor;
+
   const opacity = useRef(new Animated.Value(0)).current;
   const startedAt = useRef(Date.now());
   const [failedUri, setFailedUri] = useState<string | null>(null);
@@ -69,7 +73,7 @@ const RemoteImage = ({
   const failed = !uri || failedUri === uri;
 
   return (
-    <View style={[styles.container, { backgroundColor: placeholderColor }, style]}>
+    <View style={[styles.container, { backgroundColor: actualPlaceholderColor }, style]}>
       {!failed && (
         <Animated.Image
           source={{ uri }}
@@ -82,7 +86,7 @@ const RemoteImage = ({
       )}
       {failed && showErrorIcon && (
         <View style={styles.errorContainer}>
-          <ImageOff size={errorIconSize} color="#9AA0A6" />
+          <ImageOff size={errorIconSize} color={colors.onSurfaceVariant} />
         </View>
       )}
     </View>

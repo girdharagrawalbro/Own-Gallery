@@ -21,6 +21,7 @@ import { ArrowLeft, Search, Users, X, ScanFace } from 'lucide-react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPeople, scanFaces } from '../../api/people';
 import { Person } from '../../types/people';
+import { useTheme } from '../../context/ThemeContext';
 
 
 const { width } = Dimensions.get('window');
@@ -37,6 +38,9 @@ const FaceAvatar = ({
     coverFace: Person['cover_face'];
     size: number;
 }) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
+
     if (!thumbnailUrl) {
         return (
             <View style={[styles.avatarPlaceholder, { width: size, height: size, borderRadius: size / 2 }]}>
@@ -92,7 +96,45 @@ const FadeInItem = ({ index, children }: { index: number; children: React.ReactN
     return <Animated.View style={{ opacity }}>{children}</Animated.View>;
 };
 
+const SkeletonPeopleGrid = () => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
+    const opacity = useRef(new Animated.Value(0.5)).current;
+
+    useEffect(() => {
+        const anim = Animated.loop(
+            Animated.sequence([
+                Animated.timing(opacity, { toValue: 1, duration: 650, useNativeDriver: true }),
+                Animated.timing(opacity, { toValue: 0.5, duration: 650, useNativeDriver: true }),
+            ]),
+        );
+        anim.start();
+        return () => anim.stop();
+    }, [opacity]);
+
+    return (
+        <Animated.View style={[{ opacity, flex: 1, paddingTop: 8, paddingHorizontal: 16 }]} pointerEvents="none">
+            {Array.from({ length: 5 }).map((_, r) => (
+                <View key={r} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
+                    {Array.from({ length: COLS }).map((__, c) => (
+                        <View key={c} style={{ width: AVATAR, alignItems: 'center' }}>
+                            <View style={styles.avatarWrapper}>
+                                <View style={[styles.avatarPlaceholder, { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, backgroundColor: colors.surfaceVariant || '#e8eaed' }]} />
+                            </View>
+                            <View style={{ width: AVATAR * 0.7, height: 12, backgroundColor: colors.surfaceVariant || '#e8eaed', borderRadius: 4, marginTop: 4 }} />
+                            <View style={{ width: AVATAR * 0.4, height: 10, backgroundColor: colors.surfaceVariant || '#e8eaed', borderRadius: 4, marginTop: 6 }} />
+                            <View style={{ width: AVATAR * 0.4, height: 10, backgroundColor: colors.surfaceVariant || '#e8eaed', borderRadius: 4, marginTop: 6 }} />
+                        </View>
+                    ))}
+                </View>
+            ))}
+        </Animated.View>
+    );
+};
+
 const PeopleScreen = () => {
+    const { colors, isDark } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();
 
@@ -138,7 +180,7 @@ const PeopleScreen = () => {
     const filtered = searchQuery.trim()
         ? people.filter(p =>
             p.display_name.toLowerCase().includes(searchQuery.toLowerCase()),
-          )
+        )
         : people;
 
     const renderItem = ({ item, index }: { item: Person; index: number }) => (
@@ -164,28 +206,28 @@ const PeopleScreen = () => {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
 
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
                 {searchVisible ? (
                     <View style={styles.searchPill}>
-                        <Search size={18} color="#888" style={{ marginRight: 8 }} />
+                        <Search size={18} color={colors.onSurfaceVariant} style={{ marginRight: 8 }} />
                         <TextInput
                             style={styles.searchInput}
                             placeholder="Search people"
-                            placeholderTextColor="#999"
+                            placeholderTextColor={colors.onSurfaceVariant}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             autoFocus
                         />
                         <TouchableOpacity onPress={() => { setSearchVisible(false); setSearchQuery(''); }} hitSlop={10}>
-                            <X size={18} color="#888" />
+                            <X size={18} color={colors.onSurfaceVariant} />
                         </TouchableOpacity>
                     </View>
                 ) : (
                     <>
                         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12} style={styles.iconBtn}>
-                            <ArrowLeft size={24} color="#3c4043" />
+                            <ArrowLeft size={24} color={colors.text} />
                         </TouchableOpacity>
                         <Text style={styles.headerTitle}>People & Pets</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -197,13 +239,13 @@ const PeopleScreen = () => {
                                 accessibilityLabel="Scan photos for faces"
                             >
                                 {scanMutation.isPending ? (
-                                    <ActivityIndicator size="small" color="#1a73e8" />
+                                    <ActivityIndicator size="small" color={colors.primary} />
                                 ) : (
-                                    <ScanFace size={22} color="#3c4043" />
+                                    <ScanFace size={22} color={colors.text} />
                                 )}
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => setSearchVisible(true)} hitSlop={12} style={styles.iconBtn}>
-                                <Search size={22} color="#3c4043" />
+                                <Search size={22} color={colors.text} />
                             </TouchableOpacity>
                         </View>
                     </>
@@ -211,12 +253,10 @@ const PeopleScreen = () => {
             </View>
 
             {loading ? (
-                <View style={styles.center}>
-                    <ActivityIndicator size="large" color="#1a73e8" />
-                </View>
+                <SkeletonPeopleGrid />
             ) : filtered.length === 0 ? (
                 <View style={styles.center}>
-                    <Users size={64} color="#ddd" />
+                    <Users size={64} color={colors.onSurfaceVariant} />
                     <Text style={styles.emptyTitle}>
                         {searchQuery ? 'No matches' : 'No people found'}
                     </Text>
@@ -259,8 +299,8 @@ const PeopleScreen = () => {
 
 export default PeopleScreen;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
 
     header: {
@@ -268,22 +308,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 8,
         paddingBottom: 12,
-        backgroundColor: '#fff',
+        backgroundColor: colors.background,
     },
     iconBtn: { padding: 10, borderRadius: 22 },
-    headerTitle: { flex: 1, fontSize: 22, fontWeight: '500', color: '#1c1b1f', marginLeft: 4 },
+    headerTitle: { flex: 1, fontSize: 22, fontWeight: '500', color: colors.text, marginLeft: 4 },
 
     searchPill: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f1f3f4',
+        backgroundColor: colors.surfaceVariant || '#f1f3f4',
         borderRadius: 24,
         paddingHorizontal: 14,
         height: 46,
         marginHorizontal: 4,
     },
-    searchInput: { flex: 1, fontSize: 16, color: '#222', paddingVertical: 0 },
+    searchInput: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 0 },
 
     listContent: { paddingHorizontal: 16, paddingTop: 8 },
 
@@ -300,24 +340,24 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
         elevation: 3,
         borderRadius: AVATAR / 2,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
         marginBottom: 8,
     },
     avatar: { resizeMode: 'cover' },
     avatarPlaceholder: {
-        backgroundColor: '#f0f0f0',
+        backgroundColor: colors.surfaceVariant || '#f0f0f0',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    personName: { fontSize: 13, fontWeight: '500', color: '#1c1b1f', textAlign: 'center' },
-    mediaCount: { fontSize: 12, color: '#777', marginTop: 2, textAlign: 'center' },
+    personName: { fontSize: 13, fontWeight: '500', color: colors.text, textAlign: 'center' },
+    mediaCount: { fontSize: 12, color: colors.onSurfaceVariant, marginTop: 2, textAlign: 'center' },
 
-    emptyTitle: { fontSize: 18, fontWeight: '600', color: '#3c4043', marginTop: 16, textAlign: 'center' },
-    emptySubtitle: { fontSize: 14, color: '#777', marginTop: 8, textAlign: 'center', lineHeight: 20 },
+    emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginTop: 16, textAlign: 'center' },
+    emptySubtitle: { fontSize: 14, color: colors.onSurfaceVariant, marginTop: 8, textAlign: 'center', lineHeight: 20 },
     scanBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#1a73e8',
+        backgroundColor: colors.primary,
         paddingVertical: 10,
         paddingHorizontal: 18,
         borderRadius: 20,

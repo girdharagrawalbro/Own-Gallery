@@ -28,8 +28,9 @@ import { useQuery } from '@tanstack/react-query';
 import RemoteImage from '../../components/RemoteImage';
 import { getAlbums } from '../../api/albums';
 import { Album } from '../../types/album';
-import { colors, radii, elevation, ripple } from './theme';
+import { radii, elevation, ripple } from './theme';
 import { BottomSheetMenu, SkeletonGrid, haptics } from './AlbumUIKit';
+import { useTheme } from '../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const CELL = (width - 48) / 2;
@@ -58,6 +59,8 @@ const FadeInItem = ({ index, children }: { index: number; children: React.ReactN
 };
 
 const AlbumsScreen = () => {
+    const { colors, isDark } = useTheme();
+    const styles = useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();
 
@@ -163,7 +166,7 @@ const AlbumsScreen = () => {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
 
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
                 {searchVisible ? (
@@ -267,7 +270,7 @@ const AlbumsScreen = () => {
 
 export default AlbumsScreen;
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface },
 
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 12, backgroundColor: colors.surface },

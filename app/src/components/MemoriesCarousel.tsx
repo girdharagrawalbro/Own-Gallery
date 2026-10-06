@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getMemories, getMediaStatuses } from '../api/media';
 import MediaViewer from '../screens/Gallery/MediaViewer';
 import { Media } from '../types/media';
+import { useTheme } from '../context/ThemeContext';
 
 export interface Memory {
     id: string;
@@ -15,6 +16,8 @@ export interface Memory {
 }
 
 const MemoriesCarousel = () => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const { data: memories = [], isLoading: loading } = useQuery<Memory[]>({
         queryKey: ['memories'],
         queryFn: () => getMemories(),
@@ -31,21 +34,18 @@ const MemoriesCarousel = () => {
     if (loading || memories.length === 0) return null;
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <View style={styles.header}>
                 <View style={styles.titleContainer}>
-                    <Sparkles size={18} color="#202124" />
-                    <Text style={styles.title}>Memories</Text>
+                    <Sparkles size={18} color={colors.text} />
+                    <Text style={[styles.title, { color: colors.text }]}>Memories</Text>
                 </View>
-                <TouchableOpacity>
-                    <Text style={styles.viewAll}>View all</Text>
-                </TouchableOpacity>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 {memories.map((memory) => (
                     <TouchableOpacity
                         key={memory.id}
-                        style={styles.card}
+                        style={[styles.card, { backgroundColor: colors.surfaceVariant }]}
                         activeOpacity={0.8}
                         onPress={() => {
                             setSelectedMemory(memory);
@@ -72,10 +72,10 @@ const MemoriesCarousel = () => {
     );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
     container: {
         paddingVertical: 12,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
     },
     header: {
         flexDirection: 'row',
@@ -92,12 +92,12 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#202124',
+        color: colors.text,
     },
     viewAll: {
         fontSize: 14,
         fontWeight: '500',
-        color: '#1a73e8',
+        color: colors.primary,
     },
     scrollContent: {
         paddingHorizontal: 12,
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
         height: 200,
         borderRadius: 12,
         overflow: 'hidden',
-        backgroundColor: '#f1f3f4',
+        backgroundColor: colors.surfaceVariant,
     },
     cover: {
         width: '100%',

@@ -38,7 +38,6 @@ const MemoriesCarousel = () => {
             <Sparkles size={18} />
             Memories
           </h2>
-          <button className="memories-view-all">View all</button>
         </div>
         <div className="memories-carousel">
           {memories.map((memory) => (

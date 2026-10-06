@@ -29,6 +29,7 @@ import AddMediaModal from './AddMediaModal';
 import { getAlbumMedia, removeMediaFromAlbum, setAlbumCover, updateAlbum } from '../../api/albums';
 import { Media } from '../../types/media';
 import { mediaDate } from '../../utils/format';
+import { useTheme } from '../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const CELL = (width - 48 - 24) / 4;
@@ -53,6 +54,8 @@ interface Props {
 }
 
 const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUrl, media, onClose, onSaved }: Props) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const [name, setName] = useState(albumName);
     const [editingName, setEditingName] = useState(false);
     const [description, setDescription] = useState(albumDescription);
@@ -177,11 +180,11 @@ const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUr
             <SafeAreaView style={styles.container}>
                 <View style={styles.header}>
                     <TouchableOpacity onPress={handleSave} hitSlop={12} style={styles.headerIconBtn} disabled={saving}>
-                        {saving ? <ActivityIndicator size="small" color="#1a73e8" /> : <Check size={24} color="#1a73e8" />}
+                        {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <Check size={24} color={colors.primary} />}
                     </TouchableOpacity>
                     <View style={{ flex: 1 }} />
                     <TouchableOpacity onPress={() => setSortMenuVisible(v => !v)} hitSlop={12} style={styles.headerIconBtn}>
-                        <ArrowUpDown size={22} color="#3c4043" />
+                        <ArrowUpDown size={22} color={colors.text} />
                     </TouchableOpacity>
                 </View>
 
@@ -194,7 +197,7 @@ const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUr
                                 onPress={() => { setSortBy(opt); setSortMenuVisible(false); }}
                             >
                                 <Text style={styles.sortMenuItemText}>{SORT_LABELS[opt]}</Text>
-                                {sortBy === opt && <Check size={16} color="#1a73e8" />}
+                                {sortBy === opt && <Check size={16} color={colors.primary} />}
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -207,7 +210,7 @@ const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUr
                     ListHeaderComponent={
                         <View style={styles.formArea}>
                             <TouchableOpacity style={styles.highlightRow} onPress={handleAddHighlight}>
-                                <Sparkles size={18} color="#1a73e8" />
+                                <Sparkles size={18} color={colors.primary} />
                                 <Text style={styles.highlightText}>Add highlight</Text>
                             </TouchableOpacity>
 
@@ -241,7 +244,7 @@ const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUr
                             <TextInput
                                 style={styles.descInput}
                                 placeholder="Add description"
-                                placeholderTextColor="#9aa0a6"
+                                placeholderTextColor={colors.onSurfaceVariant}
                                 value={description}
                                 onChangeText={setDescription}
                                 multiline
@@ -267,15 +270,15 @@ const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUr
 
                 <View style={styles.bottomBar}>
                     <TouchableOpacity style={styles.bottomBarBtn} onPress={() => setAddItemsVisible(true)}>
-                        <Plus size={22} color="#3c4043" />
+                        <Plus size={22} color={colors.text} />
                         <Text style={styles.bottomBarLabel}>Add items</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.bottomBarBtn} onPress={handleAddText}>
-                        <Type size={22} color="#3c4043" />
+                        <Type size={22} color={colors.text} />
                         <Text style={styles.bottomBarLabel}>Text</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.bottomBarBtn} onPress={handleAddLocation}>
-                        <MapPin size={22} color="#3c4043" />
+                        <MapPin size={22} color={colors.text} />
                         <Text style={styles.bottomBarLabel}>Location</Text>
                     </TouchableOpacity>
                 </View>
@@ -297,7 +300,7 @@ const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUr
                             )}
                         />
                         <TouchableOpacity style={styles.coverPickerCancel} onPress={() => setCoverPickerVisible(false)}>
-                            <Text style={{ color: '#1a73e8', fontSize: 16 }}>Cancel</Text>
+                            <Text style={{ color: colors.primary, fontSize: 16 }}>Cancel</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -315,36 +318,36 @@ const AlbumEditModal = ({ visible, albumId, albumName, albumDescription, coverUr
 
 export default AlbumEditModal;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    header: { flexDirection: 'row', alignItems: 'center', padding: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: { flexDirection: 'row', alignItems: 'center', padding: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
     headerIconBtn: { padding: 8 },
 
     sortMenu: {
         position: 'absolute', top: 52, right: 12, zIndex: 10,
-        backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#eee',
+        backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border,
         overflow: 'hidden', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6,
     },
     sortMenuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, minWidth: 180 },
-    sortMenuItemText: { fontSize: 14, color: '#3c4043' },
+    sortMenuItemText: { fontSize: 14, color: colors.text },
 
     formArea: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
     highlightRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
-    highlightText: { fontSize: 15, color: '#1a73e8', fontWeight: '500' },
+    highlightText: { fontSize: 15, color: colors.primary, fontWeight: '500' },
 
-    coverWrap: { width: 96, height: 96, borderRadius: 16, overflow: 'hidden', marginBottom: 16, backgroundColor: '#f1f3f4' },
+    coverWrap: { width: 96, height: 96, borderRadius: 16, overflow: 'hidden', marginBottom: 16, backgroundColor: colors.surfaceVariant },
     coverImage: { width: '100%', height: '100%' },
-    coverPlaceholder: { backgroundColor: '#f1f3f4' },
+    coverPlaceholder: { backgroundColor: colors.surfaceVariant },
     coverEditPen: {
         position: 'absolute', bottom: 4, right: 4, width: 26, height: 26, borderRadius: 13,
         backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
     },
 
-    nameText: { fontSize: 24, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
-    nameInput: { fontSize: 24, fontWeight: '700', color: '#3c4043', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1a73e8', paddingVertical: 2 },
+    nameText: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 8 },
+    nameInput: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.primary, paddingVertical: 2 },
 
-    descInput: { fontSize: 15, color: '#3c4043', marginBottom: 12, minHeight: 40 },
-    itemsHeading: { fontSize: 13, color: '#5f6368', marginTop: 8, marginBottom: 4, fontWeight: '600' },
+    descInput: { fontSize: 15, color: colors.text, marginBottom: 12, minHeight: 40 },
+    itemsHeading: { fontSize: 13, color: colors.onSurfaceVariant, marginTop: 8, marginBottom: 4, fontWeight: '600' },
 
     cell: { width: CELL, height: CELL, margin: 2, borderRadius: 6, overflow: 'hidden' },
     cellImage: { width: '100%', height: '100%' },
@@ -355,13 +358,13 @@ const styles = StyleSheet.create({
 
     bottomBar: {
         position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around',
-        paddingVertical: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee',
+        paddingVertical: 12, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border,
     },
     bottomBarBtn: { alignItems: 'center', gap: 4 },
-    bottomBarLabel: { fontSize: 12, color: '#3c4043' },
+    bottomBarLabel: { fontSize: 12, color: colors.text },
 
     coverPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    coverPickerSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '70%' },
-    coverPickerTitle: { fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 12, textAlign: 'center' },
+    coverPickerSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '70%' },
+    coverPickerTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 12, textAlign: 'center' },
     coverPickerCancel: { alignItems: 'center', paddingVertical: 14 },
 });

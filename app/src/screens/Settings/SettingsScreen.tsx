@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import RNFS from 'react-native-fs';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { updateProfile, changePassword } from '../../api/auth';
 import { getStats, type MediaStats } from '../../api/media';
 import { formatBytes } from '../../utils/format';
@@ -86,7 +87,8 @@ const SettingsScreen = () => {
 
   const [cacheSize, setCacheSize] = useState('…');
   const [isClearingCache, setIsClearingCache] = useState(false);
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system');
+  
+  const { mode: theme, setMode: setTheme, colors, isDark } = useTheme();
 
   const [stats, setStats] = useState<MediaStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -305,7 +307,7 @@ const SettingsScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollContent}>
 
         <View style={styles.section}>
@@ -351,15 +353,15 @@ const SettingsScreen = () => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionHeader}>PREFERENCES</Text>
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <Text style={styles.rowText}>Theme</Text>
+          <Text style={[styles.sectionHeader, { color: colors.onSurfaceVariant }]}>PREFERENCES</Text>
+          <View style={[styles.card, { backgroundColor: colors.surface }]}>
+            <View style={[styles.row, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.rowText, { color: colors.onSurface }]}>Theme</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 {['system', 'light', 'dark'].map((t) => (
                   <TouchableOpacity key={t} onPress={() => setTheme(t as any)}>
                     <Text style={{
-                      color: theme === t ? '#007AFF' : '#999',
+                      color: theme === t ? colors.primary : colors.onSurfaceVariant,
                       fontWeight: theme === t ? 'bold' : 'normal',
                       textTransform: 'capitalize'
                     }}>
@@ -460,6 +462,21 @@ const SettingsScreen = () => {
                 <Text style={[styles.rowText, { color: '#1a73e8' }]}>Back up now</Text>
               </TouchableOpacity>
             )}
+          </View>
+        </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionHeader}>UTILITIES</Text>
+          <View style={styles.card}>
+            <TouchableOpacity style={[styles.row, styles.noBorder]} onPress={() => navigation.navigate('PrivatePin')}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Lock size={20} color="#3c4043" style={{ marginRight: 12 }} />
+                <View>
+                  <Text style={styles.rowText}>Locked Folder</Text>
+                  <Text style={styles.subText}>Keep sensitive photos hidden and protected</Text>
+                </View>
+              </View>
+              <ChevronRight size={20} color="#c7c7cc" />
+            </TouchableOpacity>
           </View>
         </View>
 

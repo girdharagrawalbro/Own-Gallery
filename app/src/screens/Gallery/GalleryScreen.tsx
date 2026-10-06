@@ -12,6 +12,7 @@ import {
     ToastAndroid,
     TouchableOpacity,
     View,
+    StatusBar,
 } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack';
@@ -31,10 +32,12 @@ import {
     Search,
     Trash2,
     X,
+    Lock,
 } from 'lucide-react-native';
-import { bulkFavorite, bulkTrash, bulkUpdateTakenAt, downloadMediaToDevice, getMedia } from '../../api/media';
+import { bulkFavorite, bulkTrash, bulkUpdateTakenAt, downloadMediaToDevice, getMedia, bulkPrivate } from '../../api/media';
 import { Media } from '../../types/media';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { useUploadActions } from '../../context/UploadContext';
 import { useLocalMedia } from '../../hooks/useLocalMedia';
 import { mediaDate } from '../../utils/format';
@@ -61,6 +64,8 @@ const mergeMedia = (prev: Media[], fresh: Media[]): Media[] => {
 };
 
 const GalleryScreen = () => {
+    const { colors, isDark } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<StackNavigationProp<any>>();
     const { logout, user } = useAuth();
     const { completedVersion } = useUploadActions();
@@ -85,6 +90,7 @@ const GalleryScreen = () => {
     const [selectAlbumVisible, setSelectAlbumVisible] = useState(false);
     const [ordering, setOrdering] = useState<SortOrdering>('date');
     const [bulkDatePickerVisible, setBulkDatePickerVisible] = useState(false);
+    const [activePill, setActivePill] = useState<'all' | 'videos' | 'screenshots' | 'selfies'>('all');
 
     const combinedMedia = React.useMemo(() => {
         if (ordering !== 'date') return media; // Only mix local in date sorting
@@ -94,6 +100,9 @@ const GalleryScreen = () => {
         
         const merged = [...media];
         for (const local of localMedia) {
+            if (activePill === 'videos' && local.media_type !== 'video') continue;
+            if (activePill === 'screenshots' && !local.filename.toLowerCase().includes('screenshot')) continue;
+
             // Very simple deduplication:
             const key = `${local.filename}_${local.file_size}`;
             if (byFilenameSize.has(key)) {
@@ -109,7 +118,7 @@ const GalleryScreen = () => {
         
         // Sort newest first
         return merged.sort((a, b) => mediaDate(b).getTime() - mediaDate(a).getTime());
-    }, [media, localMedia, ordering]);
+    }, [media, localMedia, ordering, activePill]);
 
     const selectionAnim = useRef(new Animated.Value(0)).current;
 
@@ -121,6 +130,7 @@ const GalleryScreen = () => {
     const busyRef = useRef(false);
     const searchRef = useRef('');
     const orderingRef = useRef<SortOrdering>('date');
+    const pillRef = useRef(activePill);
     const logoutRef = useRef(logout);
     logoutRef.current = logout;
 
@@ -163,8 +173,10 @@ const GalleryScreen = () => {
         try {
             const response = await getMedia({
                 page: pageNumber,
-                search: searchRef.current.trim() || undefined,
+                search: searchRef.current.trim() || (pillRef.current === 'selfies' ? 'selfie' : undefined),
                 ordering: orderingRef.current === 'added' ? 'added' : undefined,
+                mediaType: pillRef.current === 'videos' ? 'video' : undefined,
+                category: pillRef.current === 'screenshots' ? 'screenshots' : undefined,
             });
             if (!isMounted.current || id !== requestId.current) { return; }
 
@@ -217,12 +229,13 @@ const GalleryScreen = () => {
     // Re-fetch from scratch when ordering changes.
     useEffect(() => {
         orderingRef.current = ordering;
+        pillRef.current = activePill;
         pageRef.current = 0;
         hasMoreRef.current = true;
         setMedia([]);
         fetchPage(1, 'initial');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ordering]);
+    }, [ordering, activePill]);
 
     // New uploads finished: merge them in without resetting the scroll position.
     useEffect(() => {
@@ -352,6 +365,19 @@ const GalleryScreen = () => {
         ]);
     };
 
+    const handleBulkPrivate = async () => {
+        const ids = Array.from(selectedIds);
+        try {
+            await bulkPrivate(ids);
+            ToastAndroid.show(`${ids.length} items moved to Locked Folder`, ToastAndroid.SHORT);
+            const removed = new Set(ids);
+            setMedia(prev => prev.filter(m => !removed.has(m.id)));
+            clearSelection();
+        } catch {
+            Alert.alert('Error', 'Failed to move items to Locked Folder.');
+        }
+    };
+
     const handleBulkFavorite = async () => {
         const ids = Array.from(selectedIds);
         try {
@@ -411,8 +437,8 @@ const GalleryScreen = () => {
         </View>
     ) : (
         <View style={styles.emptyState}>
-            <ImageIcon size={64} color="#ccc" style={styles.emptyIcon} />
-            <Text style={styles.emptyTitle}>
+            <ImageIcon size={64} color={colors.onSurfaceVariant} style={styles.emptyIcon} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 {searchQuery.trim() ? 'No results' : 'No photos yet'}
             </Text>
         </View>
@@ -421,14 +447,14 @@ const GalleryScreen = () => {
     const renderHeader = () => {
         if (selectionMode) return undefined;
         return (
-            <View style={styles.headerContainer}>
+            <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
                 <MemoriesCarousel />
                 <View style={styles.filtersScroll}>
                     <View style={styles.pillFilters}>
-                        <TouchableOpacity style={[styles.pillBtn, styles.pillBtnActive]}><Text style={styles.pillTextActive}>All</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.pillBtn}><Text style={styles.pillText}>Videos</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.pillBtn}><Text style={styles.pillText}>Screenshots</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.pillBtn}><Text style={styles.pillText}>Selfies</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.pillBtn, { backgroundColor: colors.surface }, activePill === 'all' && styles.pillBtnActive, { borderColor: colors.border }]} onPress={() => setActivePill('all')}><Text style={activePill === 'all' ? styles.pillTextActive : [styles.pillText, { color: colors.text }]}>All</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.pillBtn, { backgroundColor: colors.surface }, activePill === 'videos' && styles.pillBtnActive, { borderColor: colors.border }]} onPress={() => setActivePill('videos')}><Text style={activePill === 'videos' ? styles.pillTextActive : [styles.pillText, { color: colors.text }]}>Videos</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.pillBtn, { backgroundColor: colors.surface }, activePill === 'screenshots' && styles.pillBtnActive, { borderColor: colors.border }]} onPress={() => setActivePill('screenshots')}><Text style={activePill === 'screenshots' ? styles.pillTextActive : [styles.pillText, { color: colors.text }]}>Screenshots</Text></TouchableOpacity>
+                        <TouchableOpacity style={[styles.pillBtn, { backgroundColor: colors.surface }, activePill === 'selfies' && styles.pillBtnActive, { borderColor: colors.border }]} onPress={() => setActivePill('selfies')}><Text style={activePill === 'selfies' ? styles.pillTextActive : [styles.pillText, { color: colors.text }]}>Selfies</Text></TouchableOpacity>
                     </View>
                 </View>
                 <View style={styles.sortRow}>
@@ -454,15 +480,16 @@ const GalleryScreen = () => {
     };
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
             {/* Search pill */}
-            <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16) }]}>
-                <View style={styles.searchPill}>
-                    <Search size={20} color="#777" style={styles.searchIcon} />
+            <View style={[styles.searchContainer, { paddingTop: Math.max(insets.top, 16), backgroundColor: colors.background }]}>
+                <View style={[styles.searchPill, { backgroundColor: colors.surface }]}>
+                    <Search size={20} color={colors.onSurfaceVariant} style={styles.searchIcon} />
                     <TextInput
-                        style={styles.searchInput}
+                        style={[styles.searchInput, { color: colors.text }]}
                         placeholder="Search your photos"
-                        placeholderTextColor="#777"
+                        placeholderTextColor={colors.onSurfaceVariant}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         returnKeyType="search"
@@ -470,7 +497,7 @@ const GalleryScreen = () => {
                     />
                     {searchQuery.length > 0 ? (
                         <Pressable onPress={() => setSearchQuery('')} hitSlop={10} style={styles.clearSearch}>
-                            <X size={18} color="#5f6368" />
+                            <X size={18} color={colors.onSurfaceVariant} />
                         </Pressable>
                     ) : (
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -523,6 +550,7 @@ const GalleryScreen = () => {
                 style={[
                     styles.bottomBar,
                     {
+                        backgroundColor: colors.surface,
                         paddingBottom: Math.max(insets.bottom, 16),
                         opacity: selectionAnim,
                         transform: [{
@@ -537,30 +565,34 @@ const GalleryScreen = () => {
                 <View style={styles.bottomBarContent}>
                     <View style={styles.selectionTitleRow}>
                         <TouchableOpacity onPress={clearSelection} style={styles.closeSelectBtn}>
-                            <X size={24} color="#444" />
+                            <X size={24} color={colors.onSurface} />
                         </TouchableOpacity>
-                        <Text style={styles.selectionCount}>{selectedIds.size} selected</Text>
+                        <Text style={[styles.selectionCount, { color: colors.onSurface }]}>{selectedIds.size} selected</Text>
                     </View>
                     <View style={styles.bottomBarActions}>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setSelectAlbumVisible(true)}>
-                            <FolderPlus size={24} color="#444" />
-                            <Text style={styles.actionText}>Add</Text>
+                            <FolderPlus size={24} color={colors.onSurface} />
+                            <Text style={[styles.actionText, { color: colors.onSurface }]}>Add</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setBulkDatePickerVisible(true)}>
-                            <CalendarDays size={24} color="#444" />
-                            <Text style={styles.actionText}>Date</Text>
+                            <CalendarDays size={24} color={colors.onSurface} />
+                            <Text style={[styles.actionText, { color: colors.onSurface }]}>Date</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.actionBtn} onPress={handleBulkFavorite}>
-                            <Heart size={24} color="#444" />
-                            <Text style={styles.actionText}>Favorite</Text>
+                            <Heart size={24} color={colors.onSurface} />
+                            <Text style={[styles.actionText, { color: colors.onSurface }]}>Favorite</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionBtn} onPress={handleBulkPrivate}>
+                            <Lock size={24} color={colors.onSurface} />
+                            <Text style={[styles.actionText, { color: colors.onSurface }]}>Lock</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.actionBtn} onPress={handleBulkDownload}>
-                            <Download size={24} color="#444" />
-                            <Text style={styles.actionText}>Save</Text>
+                            <Download size={24} color={colors.onSurface} />
+                            <Text style={[styles.actionText, { color: colors.onSurface }]}>Save</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.actionBtn} onPress={handleBulkTrash}>
-                            <Trash2 size={24} color="#444" />
-                            <Text style={styles.actionText}>Delete</Text>
+                            <Trash2 size={24} color={colors.onSurface} />
+                            <Text style={[styles.actionText, { color: colors.onSurface }]}>Delete</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -663,35 +695,35 @@ const BulkDatePickerModal = ({ count, onConfirm, onCancel }: {
     );
 };
 
-const bulkStyles = StyleSheet.create({
+const getBulkStyles = (colors: any) => StyleSheet.create({
     overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-    sheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-    title: { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 6, textAlign: 'center' },
-    subtitle: { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 20 },
+    sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+    title: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 6, textAlign: 'center' },
+    subtitle: { fontSize: 13, color: colors.onSurfaceVariant, textAlign: 'center', marginBottom: 20 },
     row: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', marginBottom: 24, gap: 4 },
     field: { alignItems: 'center' },
-    label: { fontSize: 11, color: '#888', marginBottom: 4 },
-    input: { backgroundColor: '#f1f3f4', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, fontSize: 18, fontWeight: '600', minWidth: 52, textAlign: 'center', color: '#111' },
-    sep: { fontSize: 18, fontWeight: '600', color: '#888', marginBottom: 10, paddingHorizontal: 2 },
+    label: { fontSize: 11, color: colors.onSurfaceVariant, marginBottom: 4 },
+    input: { backgroundColor: colors.surfaceVariant, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, fontSize: 18, fontWeight: '600', minWidth: 52, textAlign: 'center', color: colors.text },
+    sep: { fontSize: 18, fontWeight: '600', color: colors.onSurfaceVariant, marginBottom: 10, paddingHorizontal: 2 },
     actions: { flexDirection: 'row', gap: 12 },
-    cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f1f3f4', alignItems: 'center' },
-    cancelText: { color: '#333', fontSize: 16, fontWeight: '600' },
-    confirmBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#1a73e8', alignItems: 'center' },
+    cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.surfaceVariant, alignItems: 'center' },
+    cancelText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+    confirmBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' },
     confirmText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.surface },
 
     searchContainer: {
         paddingHorizontal: 16,
         paddingBottom: 8,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
     },
     searchPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f1f3f4',
+        backgroundColor: colors.surfaceVariant,
         borderRadius: 24,
         paddingHorizontal: 16,
         height: 48,
@@ -712,7 +744,7 @@ const styles = StyleSheet.create({
     searchInput: {
         flex: 1,
         fontSize: 16,
-        color: '#222',
+        color: colors.text,
         paddingVertical: 0,
     },
     clearSearch: { padding: 4, marginLeft: 8 },
@@ -720,7 +752,7 @@ const styles = StyleSheet.create({
         width: 30,
         height: 30,
         borderRadius: 15,
-        backgroundColor: '#1a73e8',
+        backgroundColor: colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 12,
@@ -729,13 +761,13 @@ const styles = StyleSheet.create({
 
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
     emptyIcon: { marginBottom: 16 },
-    emptyTitle: { fontSize: 18, fontWeight: '500', color: '#3c4043', marginBottom: 8 },
-    emptySubtitle: { fontSize: 14, color: '#5f6368', textAlign: 'center', marginBottom: 16 },
+    emptyTitle: { fontSize: 18, fontWeight: '500', color: colors.text, marginBottom: 8 },
+    emptySubtitle: { fontSize: 14, color: colors.onSurfaceVariant, textAlign: 'center', marginBottom: 16 },
     retryBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: '#1a73e8',
+        backgroundColor: colors.primary,
         paddingHorizontal: 20,
         paddingVertical: 10,
         borderRadius: 20,
@@ -748,7 +780,7 @@ const styles = StyleSheet.create({
         width: 56,
         height: 56,
         borderRadius: 16,
-        backgroundColor: '#1a73e8',
+        backgroundColor: colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
         elevation: 6,
@@ -763,7 +795,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
         elevation: 16,
@@ -775,7 +807,7 @@ const styles = StyleSheet.create({
     bottomBarContent: { paddingTop: 16, paddingHorizontal: 16 },
     selectionTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
     closeSelectBtn: { marginRight: 16 },
-    selectionCount: { fontSize: 18, fontWeight: '500', color: '#222' },
+    selectionCount: { fontSize: 18, fontWeight: '500', color: colors.text },
     bottomBarActions: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -786,7 +818,7 @@ const styles = StyleSheet.create({
     actionText: { fontSize: 12, fontWeight: '500', color: '#444', marginTop: 6 },
 
     headerContainer: {
-        backgroundColor: '#fff',
+        backgroundColor: colors.surface,
         paddingBottom: 8,
     },
     filtersScroll: {
@@ -801,15 +833,15 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
-        backgroundColor: '#f1f3f4',
+        backgroundColor: colors.surfaceVariant,
     },
     pillBtnActive: {
-        backgroundColor: '#1a73e8',
+        backgroundColor: colors.primary,
     },
     pillText: {
         fontSize: 14,
         fontWeight: '500',
-        color: '#3c4043',
+        color: colors.text,
     },
     pillTextActive: {
         fontSize: 14,
@@ -831,17 +863,17 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
         borderRadius: 20,
         borderWidth: 1.5,
-        borderColor: '#d0d0d0',
+        borderColor: colors.border,
         backgroundColor: 'transparent',
     },
     sortPillActive: {
-        backgroundColor: '#1a73e8',
-        borderColor: '#1a73e8',
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
     sortPillText: {
         fontSize: 12,
         fontWeight: '500',
-        color: '#888',
+        color: colors.onSurfaceVariant,
     },
     sortPillTextActive: {
         color: '#fff',

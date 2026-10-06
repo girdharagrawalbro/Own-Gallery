@@ -17,6 +17,7 @@ import { Folder } from 'lucide-react-native';
 import { getAlbums, addMediaToAlbum, createAlbum } from '../../api/albums';
 import { Album } from '../../types/album';
 import RemoteImage from '../../components/RemoteImage';
+import { useTheme } from '../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const CELL = (width - 48) / 2;
@@ -30,6 +31,9 @@ interface Props {
 }
 
 const SelectAlbumModal = ({ visible, mediaIds, onClose, onAdded }: Props) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
+
     const [albums, setAlbums] = useState<Album[]>([]);
     const [loading, setLoading] = useState(false);
     const [adding, setAdding] = useState(false);
@@ -169,25 +173,25 @@ const SelectAlbumModal = ({ visible, mediaIds, onClose, onAdded }: Props) => {
 
 export default SelectAlbumModal;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111' },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background || colors.surface },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
     closeBtn: { padding: 8 },
-    closeBtnText: { fontSize: 16, color: '#007AFF' },
-    createContainer: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee', gap: 12 },
-    createInput: { flex: 1, height: 44, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 12, backgroundColor: '#f9f9f9' },
-    createBtn: { height: 44, paddingHorizontal: 16, backgroundColor: '#007AFF', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+    closeBtnText: { fontSize: 16, color: colors.primary },
+    createContainer: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
+    createInput: { flex: 1, height: 44, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, backgroundColor: colors.surfaceVariant, color: colors.text },
+    createBtn: { height: 44, paddingHorizontal: 16, backgroundColor: colors.primary, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
     createBtnDisabled: { opacity: 0.5 },
-    createBtnText: { color: '#fff', fontWeight: '600' },
+    createBtnText: { color: colors.surface, fontWeight: '600' },
     loader: { marginTop: 40 },
     listContent: { padding: 16 },
     albumCard: { width: CELL, marginBottom: 24, marginHorizontal: 8 },
-    coverContainer: { width: CELL, height: CELL, borderRadius: 12, overflow: 'hidden', backgroundColor: '#f0f0f0', marginBottom: 8 },
+    coverContainer: { width: CELL, height: CELL, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceVariant, marginBottom: 8 },
     coverImage: { width: '100%', height: '100%' },
     placeholderCover: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    albumName: { fontSize: 16, fontWeight: '600', color: '#111' },
+    albumName: { fontSize: 16, fontWeight: '600', color: colors.text },
     emptyState: { alignItems: 'center', marginTop: 40 },
-    emptyText: { color: '#888', fontSize: 16 },
+    emptyText: { color: colors.onSurfaceVariant, fontSize: 16 },
     addingOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
 });

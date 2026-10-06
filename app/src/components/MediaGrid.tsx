@@ -23,6 +23,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { AlertCircle, Check, Heart, Play } from 'lucide-react-native';
+import { useTheme } from '../context/ThemeContext';
 
 import RemoteImage from './RemoteImage';
 import SkeletonGrid, { GRID_GAP } from './SkeletonGrid';
@@ -154,6 +155,7 @@ const GridCell = React.memo(({
   onPress,
   onLongPress,
 }: CellProps) => {
+  const { colors, isDark } = useTheme();
   const scale = useRef(new RNAnimated.Value(selected ? 0.86 : 1)).current;
   const prevSelected = useRef(selected);
 
@@ -174,7 +176,7 @@ const GridCell = React.memo(({
 
   return (
     <Pressable
-      style={[styles.cell, !isFirst && styles.cellGap, { width, height }]}
+      style={[styles.cell, { backgroundColor: colors.background }, !isFirst && styles.cellGap, { width, height }]}
       onPress={() => onPress(item)}
       onLongPress={() => onLongPress(item)}
       delayLongPress={300}
@@ -182,6 +184,7 @@ const GridCell = React.memo(({
       <RNAnimated.View
         style={[
           styles.cellInner,
+          { backgroundColor: isDark ? '#333' : '#f1f3f4' },
           selected && styles.cellInnerSelected,
           { transform: [{ scale }] },
         ]}
@@ -295,18 +298,20 @@ interface HeaderProps {
   onToggle: (ids: number[]) => void;
 }
 
-const GridHeader = React.memo(({ title, ids, allSelected, showCheckbox, onToggle }: HeaderProps) => (
-  <View style={styles.header}>
-    <Text style={styles.headerText} numberOfLines={1}>{title}</Text>
+const GridHeader = React.memo(({ title, ids, allSelected, showCheckbox, onToggle }: HeaderProps) => {
+  const { colors, isDark } = useTheme();
+  return (
+  <View style={[styles.header, { backgroundColor: colors.background }]}>
+    <Text style={[styles.headerText, { color: colors.onBackground }]} numberOfLines={1}>{title}</Text>
     {showCheckbox && (
       <Pressable onPress={() => onToggle(ids)} hitSlop={12} style={styles.headerCheckBtn}>
-        <View style={[styles.headerCheck, allSelected && styles.headerCheckActive]}>
+        <View style={[styles.headerCheck, { borderColor: isDark ? '#666' : '#9aa0a6' }, allSelected && styles.headerCheckActive]}>
           {allSelected && <Check size={14} color="#fff" strokeWidth={3} />}
         </View>
       </Pressable>
     )}
   </View>
-));
+)});
 
 // ─── Grid ───────────────────────────────────────────────────────────────────
 
@@ -581,8 +586,9 @@ const MediaGrid = ({
     transform: [{ scale: pinchScale.value }],
   }));
 
+  let emptyState = ListEmptyComponent;
   if (loading && media.length === 0) {
-    return <SkeletonGrid columns={columns} />;
+    emptyState = <SkeletonGrid columns={columns} />;
   }
 
   return (
@@ -618,7 +624,7 @@ const MediaGrid = ({
           ListFooterComponent={
             loadingMore ? <ActivityIndicator style={styles.footerSpinner} color="#1a73e8" /> : undefined
           }
-          ListEmptyComponent={ListEmptyComponent}
+          ListEmptyComponent={emptyState}
           ListHeaderComponent={ListHeaderComponent}
           onScroll={onScroll}
           scrollEventThrottle={16}

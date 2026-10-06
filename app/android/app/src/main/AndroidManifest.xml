@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Auto Backup reads the device's photos and videos (Android 13+ granular media access). -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -51,5 +53,16 @@
             <data android:mimeType="video/*" />
         </intent-filter>
       </activity>
+      
+      <provider
+          android:name="androidx.core.content.FileProvider"
+          android:authorities="${applicationId}.provider"
+          android:exported="false"
+          android:grantUriPermissions="true">
+          <meta-data
+              android:name="android.support.FILE_PROVIDER_PATHS"
+              android:resource="@xml/file_paths" />
+      </provider>
+
     </application>
 </manifest>

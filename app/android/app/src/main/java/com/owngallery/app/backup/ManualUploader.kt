@@ -1,4 +1,4 @@
-package com.app.backup
+package com.owngallery.app.backup
 
 import android.content.Context
 import android.net.Uri

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useTheme } from '../context/ThemeContext';
 
 export const GRID_GAP = 2;
 
@@ -10,6 +11,7 @@ interface Props {
 
 /** Shimmering placeholder grid shown on first load. One shared native-driven animation. */
 const SkeletonGrid = ({ columns = 3, rows = 8 }: Props) => {
+  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const size = (width - GRID_GAP * (columns - 1)) / columns;
   const opacity = useRef(new Animated.Value(0.5)).current;
@@ -26,14 +28,13 @@ const SkeletonGrid = ({ columns = 3, rows = 8 }: Props) => {
   }, [opacity]);
 
   return (
-    <Animated.View style={[styles.container, { opacity }]} pointerEvents="none">
-      <View style={styles.headerBar} />
+    <Animated.View style={[styles.container, { opacity, backgroundColor: colors.background }]} pointerEvents="none">
       {Array.from({ length: rows }).map((_, r) => (
         <View key={r} style={styles.row}>
           {Array.from({ length: columns }).map((__, c) => (
             <View
               key={c}
-              style={[styles.cell, c > 0 && styles.cellGap, { width: size, height: size }]}
+              style={[styles.cell, c > 0 && styles.cellGap, { width: size, height: size, backgroundColor: colors.surfaceVariant }]}
             />
           ))}
         </View>
@@ -46,16 +47,7 @@ export default SkeletonGrid;
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: '#fff',
-  },
-  headerBar: {
-    width: 120,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#e8eaed',
-    marginHorizontal: 16,
-    marginVertical: 19,
   },
   row: {
     flexDirection: 'row',

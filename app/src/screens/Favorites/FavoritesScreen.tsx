@@ -8,8 +8,11 @@ import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from '../Gallery/MediaViewer';
 import { getMedia } from '../../api/media';
 import { Media } from '../../types/media';
+import { useTheme } from '../../context/ThemeContext';
 
 const FavoritesScreen = () => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
     const gridRef = useRef<MediaGridHandle>(null);
 
@@ -118,7 +121,7 @@ const FavoritesScreen = () => {
                 bottomPadding={insets.bottom + 100}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Heart size={64} color="#ccc" style={styles.emptyIcon} />
+                        <Heart size={64} color={colors.onSurfaceVariant} style={styles.emptyIcon} />
                         <Text style={styles.emptyTitle}>No favorites yet</Text>
                     </View>
                 }
@@ -138,11 +141,11 @@ const FavoritesScreen = () => {
 
 export default FavoritesScreen;
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
-    header: { paddingHorizontal: 16, paddingBottom: 8, backgroundColor: '#fff' },
-    heading: { fontSize: 28, fontWeight: '700', color: '#3c4043', letterSpacing: -0.5 },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: { paddingHorizontal: 16, paddingBottom: 8, backgroundColor: colors.background },
+    heading: { fontSize: 28, fontWeight: '700', color: colors.text, letterSpacing: -0.5 },
     emptyState: { alignItems: 'center', paddingTop: 100, paddingHorizontal: 32 },
     emptyIcon: { marginBottom: 16 },
-    emptyTitle: { fontSize: 20, fontWeight: '700', color: '#3c4043', marginBottom: 8 },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 8 },
 });

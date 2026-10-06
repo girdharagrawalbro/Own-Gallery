@@ -21,11 +21,14 @@ import RemoteImage from '../../components/RemoteImage';
 import { createAlbum, addMediaToAlbum } from '../../api/albums';
 import { getMedia } from '../../api/media';
 import { Media } from '../../types/media';
+import { useTheme } from '../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const THUMB = (width - 48 - 24) / 4; // 4-up preview grid
 
 const CreateAlbumScreen = () => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();
 
@@ -73,11 +76,11 @@ const CreateAlbumScreen = () => {
         <View style={styles.container}>
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12} style={styles.headerIconBtn}>
-                    <ArrowLeft size={24} color="#3c4043" />
+                    <ArrowLeft size={24} color={colors.text} />
                 </TouchableOpacity>
                 {canSave && (
                     <TouchableOpacity onPress={handleSave} hitSlop={12} style={styles.headerIconBtn} disabled={saving}>
-                        {saving ? <ActivityIndicator size="small" color="#1a73e8" /> : <Check size={24} color="#1a73e8" />}
+                        {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <Check size={24} color={colors.primary} />}
                     </TouchableOpacity>
                 )}
                 <View style={{ flex: 1 }} />
@@ -87,23 +90,22 @@ const CreateAlbumScreen = () => {
                 <TextInput
                     style={styles.titleInput}
                     placeholder="Add a title"
-                    placeholderTextColor="#9aa0a6"
+                    placeholderTextColor={colors.onSurfaceVariant}
                     value={title}
                     onChangeText={setTitle}
-                    autoFocus
                     multiline
                 />
 
                 <View style={styles.optionsRow}>
                     <TouchableOpacity style={styles.optionBtn} onPress={handleSelectPeopleAndPets}>
                         <View style={styles.optionIconCircle}>
-                            <Users size={22} color="#1a73e8" />
+                            <Users size={22} color={colors.primary} />
                         </View>
                         <Text style={styles.optionLabel}>Select people & pets</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.optionBtn} onPress={() => setPhotoPickerVisible(true)}>
                         <View style={styles.optionIconCircle}>
-                            <ImageIcon size={22} color="#1a73e8" />
+                            <ImageIcon size={22} color={colors.primary} />
                         </View>
                         <Text style={styles.optionLabel}>Select photos</Text>
                     </TouchableOpacity>
@@ -162,6 +164,8 @@ const PhotoPickerModal = ({
     onClose: () => void;
     onConfirm: (items: Media[]) => void;
 }) => {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const [media, setMedia] = useState<Media[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -206,14 +210,14 @@ const PhotoPickerModal = ({
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <SafeAreaView style={styles.container}>
-                <View style={styles.pickerHeader}>
+                <View style={[styles.pickerHeader, { backgroundColor: colors.surface }]}>
                     <Text style={styles.pickerTitle}>Select Photos</Text>
                     <Pressable onPress={onClose} style={styles.headerIconBtn}>
-                        <Text style={{ color: '#1a73e8', fontSize: 16 }}>Cancel</Text>
+                        <Text style={{ color: colors.primary, fontSize: 16 }}>Cancel</Text>
                     </Pressable>
                 </View>
                 {loading ? (
-                    <View style={styles.centerFill}><ActivityIndicator size="large" color="#1a73e8" /></View>
+                    <View style={styles.centerFill}><ActivityIndicator size="large" color={colors.primary} /></View>
                 ) : (
                     <FlatList
                         data={media}
@@ -221,7 +225,7 @@ const PhotoPickerModal = ({
                         numColumns={3}
                         onEndReached={() => hasMoreRef.current && fetchPage(pageRef.current + 1)}
                         onEndReachedThreshold={0.4}
-                        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ margin: 16 }} /> : null}
+                        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ margin: 16 }} color={colors.primary} /> : null}
                         renderItem={({ item }) => {
                             const isSelected = selected.has(item.id);
                             return (
@@ -251,25 +255,25 @@ const PhotoPickerModal = ({
     );
 };
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#fff' },
+const getStyles = (colors: any) => StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
     centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 12 },
     headerIconBtn: { padding: 8 },
 
     body: { flex: 1, paddingHorizontal: 20 },
-    titleInput: { fontSize: 28, fontWeight: '600', color: '#3c4043', paddingVertical: 12 },
+    titleInput: { fontSize: 28, fontWeight: '600', color: colors.text, paddingVertical: 12 },
 
     optionsRow: { flexDirection: 'row', gap: 24, marginTop: 16, marginBottom: 8 },
     optionBtn: { alignItems: 'center', width: 96 },
     optionIconCircle: {
-        width: 56, height: 56, borderRadius: 28, backgroundColor: '#e8f0fe',
+        width: 56, height: 56, borderRadius: 28, backgroundColor: colors.surfaceVariant,
         justifyContent: 'center', alignItems: 'center', marginBottom: 8,
     },
-    optionLabel: { fontSize: 13, color: '#3c4043', textAlign: 'center' },
+    optionLabel: { fontSize: 13, color: colors.text, textAlign: 'center' },
 
-    selectedHeading: { marginTop: 16, fontSize: 14, fontWeight: '600', color: '#5f6368' },
+    selectedHeading: { marginTop: 16, fontSize: 14, fontWeight: '600', color: colors.onSurfaceVariant },
     previewCell: { width: THUMB, height: THUMB, margin: 2, borderRadius: 8, overflow: 'hidden' },
     previewImage: { width: '100%', height: '100%' },
     previewRemoveBtn: {
@@ -279,19 +283,19 @@ const styles = StyleSheet.create({
 
     pickerHeader: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee',
+        padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
     },
-    pickerTitle: { fontSize: 18, fontWeight: 'bold', color: '#111' },
+    pickerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
     gridCell: { width: width / 3, height: width / 3 },
     gridImage: { width: '100%', height: '100%' },
     selectDot: {
         position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12,
-        borderWidth: 2, borderColor: '#fff', backgroundColor: 'rgba(0,0,0,0.25)',
+        borderWidth: 2, borderColor: colors.surface, backgroundColor: 'rgba(0,0,0,0.25)',
         justifyContent: 'center', alignItems: 'center',
     },
-    selectDotActive: { backgroundColor: '#1a73e8', borderColor: '#1a73e8' },
-    pickerFooter: { padding: 16, borderTopWidth: 1, borderTopColor: '#eee' },
-    confirmBtn: { backgroundColor: '#1a73e8', paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
-    confirmBtnDisabled: { backgroundColor: '#8ab4f8' },
+    selectDotActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    pickerFooter: { padding: 16, borderTopWidth: 1, borderTopColor: colors.border },
+    confirmBtn: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
+    confirmBtnDisabled: { backgroundColor: colors.primary + '80' },
     confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

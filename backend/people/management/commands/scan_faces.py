@@ -53,6 +53,11 @@ class Command(BaseCommand):
             help="Delete faces from older embedding models (e.g. dlib) so photos are re-scanned "
             "with InsightFace. Unnamed people left empty are removed; named people are kept.",
         )
+        parser.add_argument(
+            "--hard-reset",
+            action="store_true",
+            help="Clear ALL faces, people, clear cache, purge celery queues, and start scanning from scratch.",
+        )
 
     def handle(self, *args, **options):
         user_identifier = options.get("user")
@@ -61,7 +66,24 @@ class Command(BaseCommand):
         sync = options.get("sync", False)
         cluster_only = options.get("cluster_only", False)
 
-        if options.get("reset_legacy"):
+        if options.get("hard_reset"):
+            from people.models import Face, Person
+            import os
+
+            count = Face.objects.all().count()
+            Face.objects.all().delete()
+            Person.objects.all().delete()
+            self.stdout.write(self.style.WARNING(f"Deleted ALL {count} face(s) and people."))
+
+            self.stdout.write("Clearing redis cache...")
+            cache.clear()
+
+            self.stdout.write("Purging celery queues...")
+            os.system("celery -A config purge -f")
+
+            force = True
+
+        elif options.get("reset_legacy"):
             from people.models import Face, Person
 
             legacy = Face.objects.exclude(embedding_model__startswith="arcface")

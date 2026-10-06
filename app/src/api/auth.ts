@@ -66,7 +66,10 @@ export const changePassword = async (data: any): Promise<void> => {
 };
 
 export const googleLogin = async (authCode: string): Promise<LoginResponse> => {
-    const response = await api.post<LoginResponse>('/auth/google/', { auth_code: authCode });
+    const response = await api.post<LoginResponse>('/auth/google/', { 
+        auth_code: authCode,
+        redirect_uri: ""
+    });
     const { access, refresh } = response.data;
     await saveTokens(access, refresh);
     return response.data;
