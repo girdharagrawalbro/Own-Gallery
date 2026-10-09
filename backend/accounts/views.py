@@ -4,9 +4,14 @@ from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.throttling import UserRateThrottle
 from django.contrib.auth import update_session_auth_hash
 
 from .serializers import RegisterSerializer, UserSerializer, ChangePasswordSerializer
+
+class PrivatePinUnlockThrottle(UserRateThrottle):
+    scope = 'private_pin_unlock'
+    rate = '5/min'
 
 
 class RegisterView(generics.CreateAPIView):
@@ -77,7 +82,11 @@ class GoogleLoginView(APIView):
             
         user_info = info_r.json()
         email = user_info.get("email")
+        verified_email = user_info.get("verified_email")
         google_id = user_info.get("id")
+        
+        if not verified_email:
+            return Response({"detail": "Google email is not verified."}, status=status.HTTP_400_BAD_REQUEST)
         
         from django.contrib.auth import get_user_model
         User = get_user_model()
@@ -86,6 +95,8 @@ class GoogleLoginView(APIView):
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             user = User.objects.create(email=email, username=email.split('@')[0])
+            user.set_unusable_password()
+            user.save()
         
 
         refresh = RefreshToken.for_user(user)
@@ -114,8 +125,8 @@ class SetPrivatePinView(APIView):
         current_pin = request.data.get("current_pin")
         new_pin = request.data.get("new_pin")
         
-        if not new_pin or len(new_pin) < 4:
-            return Response({"detail": "New PIN must be at least 4 characters long."}, status=status.HTTP_400_BAD_REQUEST)
+        if not new_pin or len(new_pin) < 6:
+            return Response({"detail": "New PIN must be at least 6 characters long."}, status=status.HTTP_400_BAD_REQUEST)
             
         user = request.user
         
@@ -132,6 +143,7 @@ class SetPrivatePinView(APIView):
 
 class UnlockPrivateGalleryView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PrivatePinUnlockThrottle]
     
     def post(self, request):
         from django.contrib.auth.hashers import check_password

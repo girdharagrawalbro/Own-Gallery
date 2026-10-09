@@ -1,5 +1,8 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+from utils.api_cache import increment_user_cache_version
 
 
 class Person(models.Model):
@@ -82,3 +85,18 @@ class Face(models.Model):
 
     def __str__(self):
         return f"Face #{self.pk} in media #{self.media_id}"
+
+@receiver([post_save, post_delete], sender=Person)
+def invalidate_person_cache(sender, instance, **kwargs):
+    if hasattr(instance, 'user_id'):
+        increment_user_cache_version(instance.user_id, "people")
+
+@receiver([post_save, post_delete], sender=Face)
+def invalidate_face_cache(sender, instance, **kwargs):
+    user_id = None
+    if instance.person_id and hasattr(instance.person, 'user_id'):
+        user_id = instance.person.user_id
+    elif instance.media_id and hasattr(instance.media, 'user_id'):
+        user_id = instance.media.user_id
+    if user_id:
+        increment_user_cache_version(user_id, "people")

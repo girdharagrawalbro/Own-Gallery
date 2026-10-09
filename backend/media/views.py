@@ -15,6 +15,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.html import escape
 from django.utils.timezone import is_aware, make_aware
+from django.utils.decorators import method_decorator
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -34,6 +35,7 @@ from .serializers import MediaSerializer
 from .signing import SignedMediaAuthentication, SignedMediaGrant
 from .streaming import bytes_response, ranged_response
 from .tasks import apply_taken_at, delete_telegram_messages, requeue_stalled, upload_media_to_telegram
+from utils.api_cache import user_cache_page
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +151,7 @@ def create_media_from_blob(*, user, blob_name, filename, mime_type, media_type, 
     return media
 
 
+@method_decorator(user_cache_page("media"), name='list')
 class MediaViewSet(viewsets.ModelViewSet):
     serializer_class = MediaSerializer
     permission_classes = [IsAuthenticated]
@@ -505,6 +508,7 @@ class MediaViewSet(viewsets.ModelViewSet):
 
     # -- listing helpers -----------------------------------------------------------
 
+    @user_cache_page("media")
     @action(detail=False, methods=["get"], url_path="timeline")
     def timeline(self, request):
         months = (
@@ -522,6 +526,7 @@ class MediaViewSet(viewsets.ModelViewSet):
             ]
         })
 
+    @user_cache_page("media")
     @action(detail=False, methods=["get"], url_path="memories")
     def memories(self, request):
         queryset = self.get_queryset().filter(status="completed", is_deleted=False).exclude(taken_at__isnull=True)
@@ -589,6 +594,7 @@ class MediaViewSet(viewsets.ModelViewSet):
 
         return Response({"memories": unique_memories[:6]})
 
+    @user_cache_page("media")
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
         from django.db.models import Q
@@ -616,6 +622,7 @@ class MediaViewSet(viewsets.ModelViewSet):
             "trash_size": trash["trash_size"] or 0,
         })
         
+    @user_cache_page("media")
     @action(detail=False, methods=["get"], url_path="places")
     def places(self, request):
         qs = self.get_queryset().exclude(latitude__isnull=True).exclude(longitude__isnull=True)
@@ -624,6 +631,7 @@ class MediaViewSet(viewsets.ModelViewSet):
         places_data = list(qs.values("id", "latitude", "longitude", "location_name"))
         return Response({"places": places_data})
         
+    @user_cache_page("media")
     @action(detail=False, methods=["get"], url_path="storage-assistant")
     def storage_assistant(self, request):
         qs = self.get_queryset()

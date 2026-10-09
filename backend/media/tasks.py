@@ -268,14 +268,6 @@ def _upload_media_to_telegram(self, media_id):
         media.temp_file_path = None
         media.save()
 
-        # Queue face detection in idle time (60 s countdown so uploads get priority)
-        try:
-            from django.conf import settings as _settings
-            if getattr(_settings, "FACE_DETECTION_ENABLED", True) and media.media_type == "image":
-                from people.tasks import detect_faces
-                detect_faces.apply_async(args=[media.id], countdown=60)
-        except Exception as _exc:
-            logger.warning("Could not queue face detection for media %s: %s", media.id, _exc)
 
         # Queue CLIP embedding generation
         try:

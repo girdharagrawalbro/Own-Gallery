@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from media.models import Media
 from media.serializers import MediaSerializer
+from utils.api_cache import user_cache_page
 
 from .models import Face, Person
 from .serializers import PersonDetailSerializer, PersonListSerializer
@@ -15,6 +16,7 @@ User = get_user_model()
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+@user_cache_page("people")
 def list_persons(request):
     """GET /api/people/ — list all non-hidden persons for the user."""
     show_hidden = request.query_params.get("hidden") == "true"
@@ -32,6 +34,7 @@ def list_persons(request):
 
 @api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
+@user_cache_page("people")
 def person_detail(request, pk):
     """GET/PATCH/DELETE /api/people/<pk>/"""
     try:
@@ -114,6 +117,7 @@ def remove_face(request, pk):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+@user_cache_page("people")
 def person_media(request, pk):
     """GET /api/people/<pk>/media/ — paginated media containing this person."""
     try:
@@ -153,6 +157,7 @@ def person_media(request, pk):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+@user_cache_page("people")
 def media_faces(request, media_id):
     """GET /api/media/<media_id>/faces/ — faces detected in a single photo."""
     faces = Face.objects.filter(media_id=media_id, media__user=request.user).select_related("person")

@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .venv/
 backend/.venv/
+backend/temp_uploads/
+backend/media_uploads/
+backend/db.sqlite3
+backend/celery_app.yaml

@@ -11,8 +11,8 @@ import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import { Media } from '../../types/media';
 
 const PrivateGalleryScreen = () => {
-  const { colors, isDark } = useTheme();
-  const styles = React.useMemo(() => getStyles(colors), [colors]);
+    const { colors, isDark } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const route = useRoute<any>();
     const navigation = useNavigation<any>();
     const insets = useSafeAreaInsets();

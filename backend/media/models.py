@@ -2,6 +2,9 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+from utils.api_cache import increment_user_cache_version
 
 
 class Media(models.Model):
@@ -138,3 +141,9 @@ class SharedLink(models.Model):
 
     def __str__(self):
         return str(self.id)
+
+@receiver([post_save, post_delete], sender=Media)
+def invalidate_media_cache(sender, instance, **kwargs):
+    if hasattr(instance, 'user_id'):
+        increment_user_cache_version(instance.user_id, "media")
+        increment_user_cache_version(instance.user_id, "albums")

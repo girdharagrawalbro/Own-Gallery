@@ -9,12 +9,13 @@ def app_version(request):
         "versionCode": 2,
         "versionName": "1.0.1",
         "apkUrl": "https://github.com/girdharagrawalbro/Own-Gallery/releases/latest/download/app-release.apk",
-        "forceUpdate": False
+        "forceUpdate": False,
+        "sha256": "dummy_sha256_hash_value"
     })
 
 urlpatterns = [
     path("version.json", app_version, name="app-version"),
-    path("admin/", admin.site.urls),
+    path("secret-admin-123/", admin.site.urls),
     path("api/auth/", include("accounts.urls")),
     path("api/", include("media.urls")),
     path("api/", include("albums.urls")),

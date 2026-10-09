@@ -5,6 +5,7 @@ import tempfile
 from celery import shared_task
 from django.conf import settings
 from django.core.cache import cache
+from utils.api_cache import increment_user_cache_version
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ def detect_faces(self, media_id: int):
 
             if faces_to_create:
                 Face.objects.bulk_create(faces_to_create)
+                increment_user_cache_version(media.user_id, "people")
                 logger.info("Detected %d face(s) in media %s", len(faces_to_create), media_id)
 
                 # Debounced cluster: fire once per user after all detections settle
@@ -244,6 +246,7 @@ def _cluster_group(faces, user, metric="cosine"):
             if sims[best] >= attach_sim and face.person_id != ids[best]:
                 Face.objects.filter(pk=face.pk).update(person_id=ids[best])
 
+    increment_user_cache_version(user.id, "people")
     return len(clusters)
 
 

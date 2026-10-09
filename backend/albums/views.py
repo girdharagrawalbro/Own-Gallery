@@ -4,10 +4,14 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from utils.api_cache import user_cache_page
+from django.utils.decorators import method_decorator
+
 from .models import Album
 from .serializers import AlbumSerializer
 
 
+@method_decorator(user_cache_page("albums"), name='list')
 class AlbumViewSet(viewsets.ModelViewSet):
 
     serializer_class = AlbumSerializer
@@ -91,6 +95,7 @@ class AlbumViewSet(viewsets.ModelViewSet):
             "removed_count": media.count()
         })
 
+    @user_cache_page("albums")
     @action(
         detail=True,
         methods=["get"],

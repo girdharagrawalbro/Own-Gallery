@@ -1,8 +1,10 @@
 from django.db import models
 
 # Create your models here.
-from django.conf import settings
 from django.db import models
+from django.db.models.signals import post_save, post_delete, m2m_changed
+from django.dispatch import receiver
+from utils.api_cache import increment_user_cache_version
 
 
 class Album(models.Model):
@@ -45,3 +47,13 @@ class Album(models.Model):
 
     def __str__(self):
         return self.name
+
+@receiver([post_save, post_delete], sender=Album)
+def invalidate_album_cache(sender, instance, **kwargs):
+    if hasattr(instance, 'user_id'):
+        increment_user_cache_version(instance.user_id, "albums")
+
+@receiver(m2m_changed, sender=Album.media.through)
+def invalidate_album_media_cache(sender, instance, **kwargs):
+    if hasattr(instance, 'user_id'):
+        increment_user_cache_version(instance.user_id, "albums")

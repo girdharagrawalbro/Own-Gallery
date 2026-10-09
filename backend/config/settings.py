@@ -195,12 +195,7 @@ CELERY_WORKER_ENABLE_REMOTE_CONTROL = os.getenv("CELERY_REMOTE_CONTROL", "False"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 
-CELERY_BEAT_SCHEDULE = {
-    "reprocess-undetected-faces-hourly": {
-        "task": "people.tasks.reprocess_undetected_faces",
-        "schedule": 3600.0,  # Run every hour
-    },
-}
+CELERY_BEAT_SCHEDULE = {}
 
 if os.getenv("CACHE_BACKEND") == "locmem":
     CACHES = {
@@ -267,7 +262,7 @@ VIDEO_TRANSCODE_HEVC = os.getenv("VIDEO_TRANSCODE_HEVC", "False").lower() == "tr
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "accounts.authentication.QueryStringJWTAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",

@@ -23,6 +23,7 @@ interface UpdateInfo {
   versionName: string;
   apkUrl: string;
   forceUpdate: boolean;
+  sha256: string;
 }
 
 export const AppUpdater = () => {
@@ -56,6 +57,11 @@ export const AppUpdater = () => {
   const handleUpdate = async () => {
     if (!updateInfo) return;
 
+    if (!updateInfo.apkUrl.startsWith('https://')) {
+      Alert.alert('Update Failed', 'Update URL must use HTTPS for security.');
+      return;
+    }
+
     setIsDownloading(true);
     setDownloadProgress(0);
 
@@ -77,6 +83,11 @@ export const AppUpdater = () => {
       });
 
       await downloadResult.promise;
+
+      const fileHash = await RNFS.hash(destPath, 'sha256');
+      if (fileHash.toLowerCase() !== updateInfo.sha256.toLowerCase()) {
+        throw new Error('Downloaded APK hash does not match expected hash.');
+      }
 
       setIsDownloading(false);
       setIsVisible(false);

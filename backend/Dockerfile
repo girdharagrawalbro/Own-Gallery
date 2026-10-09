@@ -5,6 +5,8 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+RUN useradd -m -r appuser && chown -R appuser /app
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        libpq5 \
@@ -17,7 +19,7 @@ RUN apt-get update \
 
 COPY requirements.txt .
 
-RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN pip install torch==2.2.0 torchvision==0.17.0 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir --default-timeout=180 -r requirements.txt
 
 COPY . .
@@ -29,4 +31,6 @@ EXPOSE 8000
 ENV GUNICORN_WORKERS=2 \
     GUNICORN_THREADS=24
 
-CMD ["sh", "-c", "python manage.py migrate && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers ${GUNICORN_WORKERS} --threads ${GUNICORN_THREADS} --timeout 120 --graceful-timeout 30 --keep-alive 15 --access-logfile -"]
+USER appuser
+
+CMD ["sh", "-c", "exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --worker-class gthread --workers ${GUNICORN_WORKERS} --threads ${GUNICORN_THREADS} --timeout 120 --graceful-timeout 30 --keep-alive 15 --access-logfile -"]

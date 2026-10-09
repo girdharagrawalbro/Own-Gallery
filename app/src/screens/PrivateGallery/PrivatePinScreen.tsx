@@ -27,8 +27,8 @@ const PrivatePinScreen = () => {
 
     const handleSubmit = async () => {
         if (!pin) return;
-        if (pin.length < 4) {
-            Alert.alert('Invalid PIN', 'PIN must be at least 4 characters long.');
+        if (pin.length < 6) {
+            Alert.alert('Invalid PIN', 'PIN must be at least 6 characters long.');
             return;
         }
 
