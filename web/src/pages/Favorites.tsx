@@ -25,7 +25,7 @@ const Favorites = () => {
       empty={EMPTY}
       header={
         <header className="page-header">
-          <h1>Favorites</h1>
+          <h1>Favorite</h1>
         </header>
       }
     />

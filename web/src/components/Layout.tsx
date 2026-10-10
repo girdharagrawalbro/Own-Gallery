@@ -11,7 +11,7 @@ import UploadPanel from './UploadPanel';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Photos', icon: ImageIcon, end: true },
-  { to: '/favorites', label: 'Favorites', icon: Heart, end: false },
+  { to: '/favorites', label: 'Favorite', icon: Heart, end: false },
   { to: '/albums', label: 'Albums', icon: FolderHeart, end: false },
   { to: '/people', label: 'People', icon: Users, end: false },
   { to: '/trash', label: 'Trash', icon: Trash2, end: false },

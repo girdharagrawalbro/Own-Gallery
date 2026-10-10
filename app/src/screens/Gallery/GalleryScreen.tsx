@@ -549,15 +549,6 @@ const GalleryScreen = () => {
                 onToggleGroup={toggleDateGroup}
                 onScroll={Keyboard.dismiss}
                 onEndReached={onEndReached}
-                renderCellOverlay={(item) => {
-                    if (!item._backupStatus) return null;
-                    return (
-                        <View style={styles.backupIconContainer}>
-                            {item._backupStatus === 'backed_up' && <Cloud size={14} color="#fff" />}
-                            {item._backupStatus === 'not_backed_up' && <CloudOff size={14} color="#fff" />}
-                        </View>
-                    );
-                }}
                 loading={loadState === 'loading'}
                 refreshing={loadState === 'refreshing'}
                 onRefresh={onRefresh}
