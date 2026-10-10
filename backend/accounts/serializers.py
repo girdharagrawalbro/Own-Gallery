@@ -3,8 +3,19 @@ from rest_framework import serializers
 
 
 User = get_user_model()
+from .models import UserSettings
 
-
+class UserSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserSettings
+        fields = [
+            "theme",
+            "grid_columns",
+            "backup_enabled",
+            "backup_wifi_only",
+            "backup_charging_only",
+            "backup_folders"
+        ]
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,

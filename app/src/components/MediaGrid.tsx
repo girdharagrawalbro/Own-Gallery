@@ -19,6 +19,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSettings, updateSettings } from '../api/settings';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -57,6 +58,15 @@ export const useGridColumns = (): [number, (n: number) => void] => {
           columnListeners.forEach(l => l(cachedColumns as number));
         })
         .catch(() => {});
+
+      getSettings().then(settings => {
+        if (settings.grid_columns) {
+          const next = clampColumns(settings.grid_columns);
+          cachedColumns = next;
+          columnListeners.forEach(l => l(next));
+          AsyncStorage.setItem(COLUMNS_KEY, String(next)).catch(() => {});
+        }
+      }).catch(() => {});
     }
     return () => {
       columnListeners.delete(setColumnsState);
@@ -68,6 +78,7 @@ export const useGridColumns = (): [number, (n: number) => void] => {
     cachedColumns = next;
     columnListeners.forEach(l => l(next));
     AsyncStorage.setItem(COLUMNS_KEY, String(next)).catch(() => {});
+    updateSettings({ grid_columns: next }).catch(() => {});
   }, []);
 
   return [columns, setColumns];

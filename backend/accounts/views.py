@@ -7,7 +7,8 @@ from rest_framework.views import APIView
 from rest_framework.throttling import UserRateThrottle
 from django.contrib.auth import update_session_auth_hash
 
-from .serializers import RegisterSerializer, UserSerializer, ChangePasswordSerializer
+from .serializers import RegisterSerializer, UserSerializer, ChangePasswordSerializer, UserSettingsSerializer
+from .models import UserSettings
 
 class PrivatePinUnlockThrottle(UserRateThrottle):
     scope = 'private_pin_unlock'
@@ -24,6 +25,14 @@ class UserDetailView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+class UserSettingsView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSettingsSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        settings, _ = UserSettings.objects.get_or_create(user=self.request.user)
+        return settings
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]

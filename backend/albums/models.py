@@ -2,6 +2,7 @@ from django.db import models
 
 # Create your models here.
 from django.db import models
+from django.conf import settings
 from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 from utils.api_cache import increment_user_cache_version

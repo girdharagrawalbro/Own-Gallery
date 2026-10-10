@@ -21,6 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import { updateProfile, changePassword } from '../../api/auth';
 import { getStats, type MediaStats } from '../../api/media';
+import { getSettings, updateSettings } from '../../api/settings';
 import { formatBytes } from '../../utils/format';
 import {
   type BackupFolder,
@@ -125,6 +126,7 @@ const SettingsScreen = () => {
     const ids = chosen.length === folders.length ? [] : chosen.map(f => f.id);
     try {
       await setBackupFolders(ids);
+      updateSettings({ backup_folders: ids }).catch(() => {});
       setFoldersVisible(false);
       ToastAndroid.show('Backup folders updated', ToastAndroid.SHORT);
     } catch (e: any) {
@@ -145,6 +147,26 @@ const SettingsScreen = () => {
   React.useEffect(() => {
     calculateCacheSize();
     fetchStats();
+
+    getSettings().then(async (settings) => {
+      if (settings.theme) setTheme(settings.theme as any);
+
+      if (isAutoBackupAvailable) {
+        const localBackup = await getAutoBackupStatus();
+        if (
+          localBackup.enabled !== settings.backup_enabled ||
+          localBackup.wifiOnly !== settings.backup_wifi_only ||
+          localBackup.chargingOnly !== settings.backup_charging_only
+        ) {
+           await updateAutoBackupSettings({
+             enabled: settings.backup_enabled,
+             wifiOnly: settings.backup_wifi_only,
+             chargingOnly: settings.backup_charging_only,
+           });
+           refreshBackupStatus();
+        }
+      }
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -191,6 +213,12 @@ const SettingsScreen = () => {
     setBackupStatus({ ...backupStatus, ...next });
     try {
       await updateAutoBackupSettings(next);
+      updateSettings({
+        backup_enabled: next.enabled,
+        backup_wifi_only: next.wifiOnly,
+        backup_charging_only: next.chargingOnly,
+      }).catch(() => {});
+      
       if (change.enabled !== undefined) {
         ToastAndroid.show(next.enabled ? 'Auto Backup on' : 'Auto Backup off', ToastAndroid.SHORT);
       }

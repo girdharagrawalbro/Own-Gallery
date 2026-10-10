@@ -6,8 +6,8 @@ from django.http import JsonResponse
 
 def app_version(request):
     return JsonResponse({
-        "versionCode": 2,
-        "versionName": "1.0.1",
+        "versionCode": 3,
+        "versionName": "2.0.0",
         "apkUrl": "https://github.com/girdharagrawalbro/Own-Gallery/releases/latest/download/app-release.apk",
         "forceUpdate": False,
         "sha256": "dummy_sha256_hash_value"
