@@ -6,10 +6,10 @@ import {
     Text,
     Pressable,
     ActivityIndicator,
-    SafeAreaView,
     Alert,
     ToastAndroid,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import MediaGrid from '../../components/MediaGrid';
 import { getMedia } from '../../api/media';

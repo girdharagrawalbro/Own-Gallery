@@ -1,5 +1,5 @@
 import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -19,15 +19,17 @@ import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/
 
 import { Image as ImageIcon, Folder, Heart, Trash2, Users } from 'lucide-react-native';
 
-const Tab = createBottomTabNavigator();
+const Tab = createMaterialTopTabNavigator();
 const RootStack = createStackNavigator();
 
 const MainTabs = () => {
   const { colors } = useTheme();
   return (
   <Tab.Navigator
+    tabBarPosition="bottom"
     screenOptions={({ route }) => ({
-      headerShown: false,
+      tabBarShowLabel: true,
+      tabBarShowIcon: true,
       tabBarStyle: {
         backgroundColor: colors.surface,
         borderTopWidth: 0,
@@ -37,14 +39,17 @@ const MainTabs = () => {
         shadowOpacity: 0.1,
         shadowRadius: 3,
         height: 60,
-        paddingBottom: 8,
-        paddingTop: 8,
+      },
+      tabBarIndicatorStyle: {
+        height: 0, // hide top indicator
       },
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.onSurfaceVariant,
       tabBarLabelStyle: {
         fontSize: 12,
         fontWeight: '500',
+        textTransform: 'none',
+        marginTop: 0,
       },
       tabBarIcon: ({ color, focused }) => {
         const iconProps = { color, size: 24, strokeWidth: focused ? 2.5 : 2 };

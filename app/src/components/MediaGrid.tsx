@@ -206,6 +206,7 @@ const GridCell = React.memo(({
           uri={item.thumbnail_url}
           style={StyleSheet.absoluteFill}
           showErrorIcon={!isProcessing}
+          sharedTransitionTag={`media-${item.id}`}
         />
 
         {item.media_type === 'video' && (
@@ -416,7 +417,7 @@ const MediaGrid = ({
         }
         data.push({
           type: 'header',
-          key: `header-${currentKey}`,
+          key: `header-${currentKey}-${data.length}`,
           title: formatDayTitle(d, now) + (locationStr ? ` · ${locationStr}` : ''),
           ids: bucket.map(m => m.id),
         });
@@ -722,8 +723,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: colors.surface,
   },
   checkBadgeDisabled: { backgroundColor: '#80868b' },
   uncheckedBadge: {
@@ -731,8 +730,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: colors.surface,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
   footerSpinner: { paddingVertical: 24 },
 });

@@ -16,7 +16,7 @@ import { API_BASE_URL } from '../api/client';
 
 const { ApkInstaller } = NativeModules;
 
-const CURRENT_VERSION_CODE = 1; // You can pull this dynamically using react-native-device-info if available
+const CURRENT_VERSION_CODE = 3; // You can pull this dynamically using react-native-device-info if available
 
 interface UpdateInfo {
   versionCode: number;

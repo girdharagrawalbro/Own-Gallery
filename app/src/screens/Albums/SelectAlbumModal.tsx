@@ -8,11 +8,11 @@ import {
     Pressable,
     ActivityIndicator,
     Dimensions,
-    SafeAreaView,
     Alert,
     ToastAndroid,
     TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Folder } from 'lucide-react-native';
 import { getAlbums, addMediaToAlbum, createAlbum } from '../../api/albums';
 import { Album } from '../../types/album';

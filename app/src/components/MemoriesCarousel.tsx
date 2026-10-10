@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
-import { Sparkles } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { getMemories, getMediaStatuses } from '../api/media';
 import MediaViewer from '../screens/Gallery/MediaViewer';
@@ -35,12 +34,6 @@ const MemoriesCarousel = () => {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <View style={styles.header}>
-                <View style={styles.titleContainer}>
-                    <Sparkles size={18} color={colors.text} />
-                    <Text style={[styles.title, { color: colors.text }]}>Memories</Text>
-                </View>
-            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 {memories.map((memory) => (
                     <TouchableOpacity
@@ -74,33 +67,12 @@ const MemoriesCarousel = () => {
 
 const getStyles = (colors: any) => StyleSheet.create({
     container: {
-        paddingVertical: 12,
+        paddingBottom: 12,
         backgroundColor: colors.surface,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        marginBottom: 12,
-    },
-    titleContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    title: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: colors.text,
-    },
-    viewAll: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: colors.primary,
     },
     scrollContent: {
         paddingHorizontal: 12,
+        marginTop: 12,
         gap: 12,
     },
     card: {

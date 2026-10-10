@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme, ThemeColors } from '../../context/ThemeContext';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Lock } from 'lucide-react-native';
 import { getPrivatePinStatus, setPrivatePin, unlockPrivateGallery } from '../../api/auth';

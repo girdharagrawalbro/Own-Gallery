@@ -3,7 +3,6 @@ import { useTheme, ThemeColors } from '../../context/ThemeContext';
 import {
     ActivityIndicator,
     Alert,
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
@@ -11,9 +10,11 @@ import {
     View,
     ToastAndroid,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { login, register, googleLogin } from '../../api/auth';
+import { GoogleIcon } from '../../components/GoogleIcon';
 import { useAuth } from '../../context/AuthContext';
 
 interface RegisterScreenProps {
@@ -22,6 +23,8 @@ interface RegisterScreenProps {
 
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
     const { setAuthenticated } = useAuth();
+    const { colors, isDark } = useTheme();
+    const styles = React.useMemo(() => getStyles(colors), [colors]);
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -144,7 +147,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
                     onPress={handleRegister}
                     disabled={loading}>
                     {loading ? (
-                        <ActivityIndicator color="#fff" />
+                        <ActivityIndicator color={colors.surface} />
                     ) : (
                         <Text style={styles.buttonText}>Register</Text>
                     )}
@@ -157,9 +160,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onSwitchToLogin }) => {
                 </View>
 
                 <TouchableOpacity
-                    style={[styles.button, styles.googleButton]}
+                    style={styles.googleButton}
                     onPress={handleGoogleLogin}
                     disabled={loading}>
+                    <GoogleIcon size={24} />
                     <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </TouchableOpacity>
 
@@ -190,6 +194,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         fontWeight: '700',
         textAlign: 'center',
         marginBottom: 40,
+        color: colors.onSurface,
     },
     input: {
         height: 50,
@@ -238,13 +243,20 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         fontSize: 14,
     },
     googleButton: {
+        height: 55,
         backgroundColor: colors.surface,
+        borderRadius: 28, // pill shape
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 8,
         borderWidth: 1,
-        borderColor: '#ccc',
+        borderColor: colors.border,
     },
     googleButtonText: {
-        color: '#444',
+        color: colors.onSurface,
         fontSize: 16,
         fontWeight: '600',
+        marginLeft: 12,
     }
 });

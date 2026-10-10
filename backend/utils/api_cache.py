@@ -56,9 +56,6 @@ def user_cache_page(resource, timeout=60 * 15):
             
             # Only cache 200 OK responses
             if response.status_code == 200:
-                # Need to render the response to access response.data properly if it's a DRF Response
-                if hasattr(response, 'render') and getattr(response, 'is_rendered', False) is False:
-                    response.render()
                 cache.set(cache_key, response.data, timeout=timeout)
                 
             return response

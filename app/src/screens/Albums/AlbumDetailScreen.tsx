@@ -110,6 +110,7 @@ const AlbumDetailScreen = () => {
     const clearSelection = useCallback(() => setSelectedIds(EMPTY_SELECTION), []);
 
     const toggleSelection = useCallback((id: number) => {
+        hapticSelection();
         setSelectedIds(prev => {
             const next = new Set(prev);
             if (next.has(id)) { next.delete(id); } else { next.add(id); }

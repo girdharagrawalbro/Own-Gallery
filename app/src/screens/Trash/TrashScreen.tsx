@@ -7,10 +7,12 @@ import {
     TouchableOpacity,
     View,
     ToastAndroid,
+    Pressable,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Trash2 } from 'lucide-react-native';
+import { Trash2, ArrowLeft } from 'lucide-react-native';
+import { radii } from '../Albums/theme';
 
 import MediaGrid from '../../components/MediaGrid';
 import { getTrashMedia, restoreFromTrash, permanentDelete, emptyTrash } from '../../api/media';
@@ -21,6 +23,7 @@ const TrashScreen = () => {
     const { colors } = useTheme();
     const styles = React.useMemo(() => getStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
+    const navigation = useNavigation<any>();
 
     const [media, setMedia] = useState<Media[]>([]);
     const [loading, setLoading] = useState(true);
@@ -127,9 +130,14 @@ const TrashScreen = () => {
     return (
         <View style={styles.container}>
             <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
-                <View>
-                    <Text style={styles.heading}>Trash</Text>
-                    <Text style={styles.subheading}>{media.length} items</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Pressable onPress={() => navigation.goBack()} hitSlop={12} android_ripple={{ color: 'rgba(0,0,0,0.08)', radius: 22 }} style={styles.roundIconBtn}>
+                        <ArrowLeft size={24} color={colors.onSurface} />
+                    </Pressable>
+                    <View style={{ marginLeft: 4 }}>
+                        <Text style={[styles.heading, { fontSize: 22 }]}>Trash</Text>
+                        <Text style={styles.subheading}>{media.length} items</Text>
+                    </View>
                 </View>
                 <TouchableOpacity onPress={handleEmptyTrash} disabled={media.length === 0 || busy}>
                     <Text style={[styles.emptyBtnText, (media.length === 0 || busy) && styles.emptyBtnDisabled]}>Empty</Text>
@@ -176,6 +184,7 @@ const getStyles = (colors: any) => StyleSheet.create({
         paddingBottom: 16,
         backgroundColor: colors.background,
     },
+    roundIconBtn: { padding: 10, borderRadius: radii.full, marginLeft: -8 },
     heading: { fontSize: 28, fontWeight: '700', color: colors.text, letterSpacing: -0.5 },
     subheading: { fontSize: 13, color: colors.onSurfaceVariant, marginTop: 2 },
     emptyBtnText: { color: colors.primary, fontSize: 16, fontWeight: '600' },

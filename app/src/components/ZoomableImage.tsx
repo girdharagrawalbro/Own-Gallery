@@ -40,6 +40,7 @@ interface Props {
   onZoomChange?: (zoomed: boolean) => void;
   /** Swipe down while not zoomed. */
   onSwipeDown?: () => void;
+  sharedTransitionTag?: string;
 }
 
 const ZoomableImage = ({
@@ -53,6 +54,7 @@ const ZoomableImage = ({
   onTap,
   onZoomChange,
   onSwipeDown,
+  sharedTransitionTag,
 }: Props) => {
 
   // Size of the image as displayed with resizeMode="contain" at scale 1.
@@ -295,6 +297,7 @@ const ZoomableImage = ({
             placeholderColor="transparent"
             fadeDuration={0}
             showErrorIcon={false}
+            sharedTransitionTag={sharedTransitionTag}
           />
           <RemoteImage
             uri={previewUri}

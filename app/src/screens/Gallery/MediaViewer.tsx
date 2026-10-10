@@ -99,6 +99,7 @@ const ViewerPage = React.memo(({
                     onTap={onTap}
                     onZoomChange={onZoomChange}
                     onSwipeDown={onSwipeDown}
+                    sharedTransitionTag={`media-${item.id}`}
                 />
             </View>
         );

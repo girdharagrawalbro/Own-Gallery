@@ -18,6 +18,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Check, Users, Image as ImageIcon, X } from 'lucide-react-native';
 import RemoteImage from '../../components/RemoteImage';
+import { PhotoPickerModal } from '../../components/PhotoPickerModal';
 import { createAlbum, addMediaToAlbum } from '../../api/albums';
 import { getMedia } from '../../api/media';
 import { Media } from '../../types/media';
@@ -151,120 +152,12 @@ const CreateAlbumScreen = () => {
 
 export default CreateAlbumScreen;
 
-// ── Inline "select photos" picker (album doesn't exist yet, so nothing is pre-added) ──────
-
-const PhotoPickerModal = ({
-    visible,
-    initiallySelected,
-    onClose,
-    onConfirm,
-}: {
-    visible: boolean;
-    initiallySelected: Media[];
-    onClose: () => void;
-    onConfirm: (items: Media[]) => void;
-}) => {
-    const { colors } = useTheme();
-    const styles = React.useMemo(() => getStyles(colors), [colors]);
-    const [media, setMedia] = useState<Media[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [selected, setSelected] = useState<Map<number, Media>>(new Map());
-    const pageRef = useRef(1);
-    const hasMoreRef = useRef(true);
-    const busyRef = useRef(false);
-
-    const fetchPage = useCallback(async (pageNumber: number) => {
-        if (pageNumber > 1 && busyRef.current) return;
-        busyRef.current = true;
-        if (pageNumber === 1) setLoading(true); else setLoadingMore(true);
-        try {
-            const data = await getMedia({ page: pageNumber });
-            setMedia(prev => (pageNumber === 1 ? data.results : [...prev, ...data.results]));
-            pageRef.current = pageNumber;
-            hasMoreRef.current = !!data.next;
-        } catch (err) {
-            console.error('Failed to fetch media', err);
-        } finally {
-            busyRef.current = false;
-            setLoading(false);
-            setLoadingMore(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (!visible) return;
-        fetchPage(1);
-        setSelected(new Map(initiallySelected.map(m => [m.id, m])));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [visible]);
-
-    const toggle = (item: Media) => {
-        setSelected(prev => {
-            const next = new Map(prev);
-            if (next.has(item.id)) next.delete(item.id); else next.set(item.id, item);
-            return next;
-        });
-    };
-
-    return (
-        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-            <SafeAreaView style={styles.container}>
-                <View style={[styles.pickerHeader, { backgroundColor: colors.surface }]}>
-                    <Text style={styles.pickerTitle}>Select Photos</Text>
-                    <Pressable onPress={onClose} style={styles.headerIconBtn}>
-                        <Text style={{ color: colors.primary, fontSize: 16 }}>Cancel</Text>
-                    </Pressable>
-                </View>
-                {loading ? (
-                    <View style={styles.centerFill}><ActivityIndicator size="large" color={colors.primary} /></View>
-                ) : (
-                    <FlatList
-                        data={media}
-                        keyExtractor={(item) => item.id.toString()}
-                        numColumns={3}
-                        onEndReached={() => hasMoreRef.current && fetchPage(pageRef.current + 1)}
-                        onEndReachedThreshold={0.4}
-                        ListFooterComponent={loadingMore ? <ActivityIndicator style={{ margin: 16 }} color={colors.primary} /> : null}
-                        renderItem={({ item }) => {
-                            const isSelected = selected.has(item.id);
-                            return (
-                                <Pressable style={styles.gridCell} onPress={() => toggle(item)}>
-                                    <RemoteImage uri={item.thumbnail_url} style={styles.gridImage} />
-                                    <View style={[styles.selectDot, isSelected && styles.selectDotActive]}>
-                                        {isSelected && <Check size={14} color="#fff" />}
-                                    </View>
-                                </Pressable>
-                            );
-                        }}
-                    />
-                )}
-                <View style={styles.pickerFooter}>
-                    <TouchableOpacity
-                        style={[styles.confirmBtn, selected.size === 0 && styles.confirmBtnDisabled]}
-                        disabled={selected.size === 0}
-                        onPress={() => onConfirm(Array.from(selected.values()))}
-                    >
-                        <Text style={styles.confirmBtnText}>
-                            Add {selected.size > 0 ? `${selected.size} ` : ''}Items
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
-        </Modal>
-    );
-};
-
 const getStyles = (colors: any) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 12 },
     headerIconBtn: { padding: 8 },
-
     body: { flex: 1, paddingHorizontal: 20 },
     titleInput: { fontSize: 28, fontWeight: '600', color: colors.text, paddingVertical: 12 },
-
     optionsRow: { flexDirection: 'row', gap: 24, marginTop: 16, marginBottom: 8 },
     optionBtn: { alignItems: 'center', width: 96 },
     optionIconCircle: {
@@ -272,7 +165,6 @@ const getStyles = (colors: any) => StyleSheet.create({
         justifyContent: 'center', alignItems: 'center', marginBottom: 8,
     },
     optionLabel: { fontSize: 13, color: colors.text, textAlign: 'center' },
-
     selectedHeading: { marginTop: 16, fontSize: 14, fontWeight: '600', color: colors.onSurfaceVariant },
     previewCell: { width: THUMB, height: THUMB, margin: 2, borderRadius: 8, overflow: 'hidden' },
     previewImage: { width: '100%', height: '100%' },
@@ -280,22 +172,4 @@ const getStyles = (colors: any) => StyleSheet.create({
         position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 10,
         backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
     },
-
-    pickerHeader: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
-    },
-    pickerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
-    gridCell: { width: width / 3, height: width / 3 },
-    gridImage: { width: '100%', height: '100%' },
-    selectDot: {
-        position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12,
-        borderWidth: 2, borderColor: colors.surface, backgroundColor: 'rgba(0,0,0,0.25)',
-        justifyContent: 'center', alignItems: 'center',
-    },
-    selectDotActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    pickerFooter: { padding: 16, borderTopWidth: 1, borderTopColor: colors.border },
-    confirmBtn: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
-    confirmBtnDisabled: { backgroundColor: colors.primary + '80' },
-    confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

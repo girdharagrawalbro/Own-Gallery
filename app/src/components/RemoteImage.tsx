@@ -25,6 +25,7 @@ interface Props {
   showErrorIcon?: boolean;
   errorIconSize?: number;
   onLoad?: () => void;
+  sharedTransitionTag?: string;
 }
 
 // Images that finish loading this quickly came from the memory cache: don't fade them.
@@ -40,6 +41,7 @@ const RemoteImage = ({
   showErrorIcon = true,
   errorIconSize = 22,
   onLoad,
+  sharedTransitionTag,
 }: Props) => {
   const { colors } = useTheme();
   const actualPlaceholderColor = placeholderColor === '#f1f3f4' ? colors.surfaceVariant : placeholderColor;
@@ -82,6 +84,7 @@ const RemoteImage = ({
           fadeDuration={0}
           onLoad={handleLoad}
           onError={handleError}
+          sharedTransitionTag={sharedTransitionTag}
         />
       )}
       {failed && showErrorIcon && (

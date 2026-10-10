@@ -43,11 +43,11 @@ import { useTheme } from '../../context/ThemeContext';
 import { useUploadActions } from '../../context/UploadContext';
 import { useLocalMedia } from '../../hooks/useLocalMedia';
 import { mediaDate } from '../../utils/format';
+import { hapticSelection, hapticSuccess, hapticWarning } from '../../utils/haptics';
 import MediaGrid, { MediaGridHandle } from '../../components/MediaGrid';
 import MediaViewer from './MediaViewer';
 import UploadPreviewModal from './UploadPreviewModal';
 import SelectAlbumModal from '../Albums/SelectAlbumModal';
-import CloudIndicator from '../../components/CloudIndicator';
 import MemoriesCarousel from '../../components/MemoriesCarousel';
 
 type LoadState = 'idle' | 'loading' | 'refreshing' | 'loadingMore' | 'error';
@@ -293,6 +293,7 @@ const GalleryScreen = () => {
     // ── Selection ───────────────────────────────────────────────────────────
 
     const toggleSelection = useCallback((id: number) => {
+        hapticSelection();
         setSelectedIds(prev => {
             const next = new Set(prev);
             if (next.has(id)) { next.delete(id); } else { next.add(id); }
@@ -301,6 +302,7 @@ const GalleryScreen = () => {
     }, []);
 
     const toggleDateGroup = useCallback((ids: number[]) => {
+        hapticSelection();
         setSelectedIds(prev => {
             const next = new Set(prev);
             const allSelected = ids.length > 0 && ids.every(id => next.has(id));
@@ -370,6 +372,7 @@ const GalleryScreen = () => {
 
     const handleBulkTrash = () => {
         const ids = Array.from(selectedIds);
+        hapticWarning();
         Alert.alert('Move to Trash', `Move ${ids.length} items to trash?`, [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -403,6 +406,7 @@ const GalleryScreen = () => {
 
     const handleBulkFavorite = async () => {
         const ids = Array.from(selectedIds);
+        hapticSuccess();
         try {
             await bulkFavorite(ids, true);
             ToastAndroid.show(`${ids.length} items added to favorites`, ToastAndroid.SHORT);
@@ -524,7 +528,9 @@ const GalleryScreen = () => {
                         </Pressable>
                     ) : (
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <CloudIndicator />
+                            <TouchableOpacity onPress={handleUpload} hitSlop={12} style={{ marginRight: 12 }}>
+                                <Plus size={24} color={colors.onSurfaceVariant} />
+                            </TouchableOpacity>
                             <TouchableOpacity style={styles.profileAvatar} onPress={() => navigation.navigate('Settings')}>
                                 <Text style={styles.profileInitial}>{user?.first_name?.charAt(0).toUpperCase() || 'U'}</Text>
                             </TouchableOpacity>
@@ -561,11 +567,6 @@ const GalleryScreen = () => {
                 bottomPadding={selectionMode ? 180 : 100}
             />
 
-            {!selectionMode && (
-                <TouchableOpacity style={[styles.fab, { bottom: Math.max(insets.bottom + 16, 16) }]} onPress={handleUpload}>
-                    <Plus size={28} color="#fff" />
-                </TouchableOpacity>
-            )}
 
             {/* Selection action bar */}
             <Animated.View
@@ -743,7 +744,7 @@ const getStyles = (colors: any) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface },
 
     searchContainer: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 0,
         paddingBottom: 8,
         backgroundColor: colors.surface,
     },

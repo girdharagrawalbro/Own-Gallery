@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   Switch,
@@ -16,6 +15,7 @@ import {
   AppState,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import RNFS from 'react-native-fs';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, ThemeColors } from '../../context/ThemeContext';
@@ -35,7 +35,7 @@ import {
   updateAutoBackupSettings,
 } from '../../services/AutoBackupService';
 import { useNavigation } from '@react-navigation/native';
-import { ChevronRight, LogOut, User, Lock, Edit3 } from 'lucide-react-native';
+import { ChevronRight, LogOut, User, Lock, Edit3, ArrowLeft } from 'lucide-react-native';
 
 // Thumbnails/previews are cached natively (Fresco / RCTImageLoader) and videos/shares
 // are downloaded into the app cache directory, so walk it recursively.
@@ -337,6 +337,12 @@ const SettingsScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <ArrowLeft size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
+      </View>
       <ScrollView style={styles.scrollContent}>
 
         <View style={styles.section}>
@@ -700,10 +706,12 @@ const SettingsScreen = () => {
 export default SettingsScreen;
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 12 },
+  headerBtn: { padding: 8, marginRight: 8 },
+  headerTitle: { fontSize: 20, fontWeight: 'bold' },
   rowTextBlock: { flex: 1, marginRight: 12 },
   container: { flex: 1, backgroundColor: colors.background },
-  scrollContent: { paddingHorizontal: 16, paddingTop:   50 },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 24, color: colors.onBackground },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 10 },
 
   section: { marginBottom: 24 },
   sectionHeader: { fontSize: 13, color: colors.onSurfaceVariant, marginBottom: 8, paddingLeft: 16, fontWeight: '600' },
